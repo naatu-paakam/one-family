@@ -1,0 +1,124 @@
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env')
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// ── Updates ──────────────────────────────────────────────────────────────────
+
+export async function fetchUpdates({ limit = 50, offset = 0, hashtag } = {}) {
+  let query = supabase
+    .from('updates')
+    .select('*, profiles(full_name, avatar_url)')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (hashtag) {
+    query = query.contains('hashtags', [hashtag])
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function fetchUpdateById(id) {
+  const { data, error } = await supabase
+    .from('updates')
+    .select('*, profiles(full_name, avatar_url)')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchRecentUpdates(days = 7) {
+  const since = new Date(Date.now() - days * 86400_000).toISOString()
+  const { data, error } = await supabase
+    .from('updates')
+    .select('id, title, content, hashtags, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function createUpdate(payload) {
+  const { data, error } = await supabase
+    .from('updates')
+    .insert(payload)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateUpdate(id, payload) {
+  const { data, error } = await supabase
+    .from('updates')
+    .update({ ...payload, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteUpdate(id) {
+  const { error } = await supabase.from('updates').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Summaries ─────────────────────────────────────────────────────────────────
+
+export async function fetchLatestSummary() {
+  const { data, error } = await supabase
+    .from('summaries')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data ?? null
+}
+
+export async function saveSummary(content) {
+  const { data, error } = await supabase
+    .from('summaries')
+    .insert({ content })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// ── Profiles ──────────────────────────────────────────────────────────────────
+
+export async function fetchProfile(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data ?? null
+}
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+export async function uploadImage(file) {
+  const ext = file.name.split('.').pop()
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const { error } = await supabase.storage
+    .from('update-images')
+    .upload(filename, file, { cacheControl: '3600', upsert: false })
+  if (error) throw error
+
+  const { data } = supabase.storage.from('update-images').getPublicUrl(filename)
+  return data.publicUrl
+}
