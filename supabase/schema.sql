@@ -23,9 +23,11 @@ begin
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name'),
-    new.raw_user_meta_data->>'avatar_url'
+    coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture')
   )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    full_name  = coalesce(excluded.full_name, profiles.full_name),
+    avatar_url = coalesce(excluded.avatar_url, profiles.avatar_url);
   return new;
 end;
 $$;
@@ -128,3 +130,23 @@ create policy "Admins can insert summaries"
 -- After the admin user logs in for the first time, run:
 --   update profiles set is_admin = true where id = '<user-uuid>';
 -- Or use the Supabase Table Editor to toggle is_admin = true.
+
+-- ── Events (parallel timeline branches) ──────────────────────────────────────
+create table if not exists events (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text,
+  created_by  uuid references profiles(id) on delete set null,
+  started_at  timestamptz not null default now(),
+  closed_at   timestamptz,
+  created_at  timestamptz not null default now()
+);
+
+alter table events enable row level security;
+create policy "Events viewable by everyone" on events for select using (true);
+create policy "Logged-in users can create events" on events for insert with check (auth.uid() is not null);
+create policy "Creator or admin can update event" on events for update
+  using (auth.uid() = created_by or exists (select 1 from profiles where id = auth.uid() and is_admin));
+
+-- event_id on updates
+alter table updates add column if not exists event_id uuid references events(id) on delete set null;

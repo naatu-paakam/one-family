@@ -33,7 +33,7 @@ export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId }
   if (isDemo) return []
   let query = supabase
     .from('updates')
-    .select('*, profiles(full_name, avatar_url)')
+    .select('*, profiles(full_name, avatar_url), events(id, title, closed_at)')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -49,7 +49,7 @@ export async function fetchUpdateById(id) {
   if (isDemo) return null
   const { data, error } = await supabase
     .from('updates')
-    .select('*, profiles(full_name, avatar_url)')
+    .select('*, profiles(full_name, avatar_url), events(id, title, closed_at)')
     .eq('id', id)
     .single()
   if (error) throw error
@@ -171,4 +171,40 @@ export async function uploadImage(file) {
 
   const { data } = supabase.storage.from('update-images').getPublicUrl(filename)
   return data.publicUrl
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+export async function fetchActiveEvent() {
+  if (isDemo) return null
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .is('closed_at', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function createEvent({ title, description }) {
+  const { data, error } = await supabase
+    .from('events')
+    .insert({ title, description, created_by: (await supabase.auth.getUser()).data.user?.id })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function closeEvent(id) {
+  const { data, error } = await supabase
+    .from('events')
+    .update({ closed_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }

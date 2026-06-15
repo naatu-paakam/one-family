@@ -2,11 +2,13 @@ import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { createUpdate, uploadImage, fetchRecentUpdates, callEdgeFunction } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useEvent } from '../contexts/EventContext'
 
 const EMPTY = { title: '', content: '', hashtags: '', imageFile: null, imagePreview: null }
 
 export default function AdminForm({ onCreated }) {
   const { session } = useAuth()
+  const { activeEvent } = useEvent()
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -52,7 +54,7 @@ export default function AdminForm({ onCreated }) {
         recentEvents,
       })
       set('content', description)
-      if (uploadedUrl) set('imageFile', null) // already uploaded
+      if (uploadedUrl) set('imageFile', null)
       toast.success('Description generated!')
     } catch (e) {
       toast.error(e.message)
@@ -80,10 +82,11 @@ export default function AdminForm({ onCreated }) {
         hashtags: parseHashtags(form.hashtags),
         author_id: session.user.id,
         ai_generated: generating ? true : undefined,
+        event_id: activeEvent?.id ?? null,
       }
 
       const created = await createUpdate(payload)
-      toast.success('Update posted!')
+      toast.success(activeEvent ? `Posted to "${activeEvent.title}" event!` : 'Update posted!')
       setForm(EMPTY)
       onCreated?.(created)
     } catch (e) {
@@ -95,6 +98,12 @@ export default function AdminForm({ onCreated }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {activeEvent && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+          🎉 This post will be added to <strong>{activeEvent.title}</strong>
+        </div>
+      )}
+
       {/* Image upload */}
       <div>
         <label className="label">Image (optional)</label>

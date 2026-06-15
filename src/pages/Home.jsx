@@ -20,7 +20,6 @@ export default function Home() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Filter by active hashtag
   const filtered = activeTag
     ? allUpdates.filter(u => u.hashtags?.includes(activeTag))
     : allUpdates
@@ -28,7 +27,6 @@ export default function Home() {
   return (
     <div>
       <SummarySection />
-      <HashtagStats updates={allUpdates} />
 
       {activeTag && (
         <div className="mb-4 flex items-center gap-2">
@@ -39,6 +37,8 @@ export default function Home() {
       )}
 
       <Timeline updates={filtered} loading={loading} />
+
+      <HashtagStats updates={allUpdates} />
     </div>
   )
 }

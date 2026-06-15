@@ -17,22 +17,32 @@ export function AuthProvider({ children }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) loadProfile(session.user.id)
+      if (session) loadProfile(session.user.id, session.user.user_metadata)
       else setLoading(false)
     }).catch(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) loadProfile(session.user.id)
+      if (session) loadProfile(session.user.id, session.user.user_metadata)
       else { setProfile(null); setLoading(false) }
     })
 
     return () => subscription?.unsubscribe()
   }, [])
 
-  async function loadProfile(userId) {
+  async function loadProfile(userId, userMeta) {
     try {
-      const p = await fetchProfile(userId)
+      let p = await fetchProfile(userId)
+      // Sync avatar/name from OAuth metadata if profile is missing them
+      if (userMeta && p && (!p.avatar_url || !p.full_name)) {
+        const patch = {}
+        if (!p.avatar_url) patch.avatar_url = userMeta.avatar_url || userMeta.picture || null
+        if (!p.full_name)  patch.full_name  = userMeta.full_name  || userMeta.name   || null
+        if (Object.keys(patch).length) {
+          const { data } = await supabase.from('profiles').update(patch).eq('id', userId).select().single()
+          if (data) p = data
+        }
+      }
       setProfile(p)
     } finally {
       setLoading(false)

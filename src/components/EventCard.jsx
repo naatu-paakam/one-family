@@ -42,7 +42,7 @@ export default function EventCard({ update }) {
             )}
             <span>{authorName}</span>
             <span>·</span>
-            <time dateTime={created_at}>{format(new Date(created_at), 'MMM d, yyyy')}</time>
+            <time dateTime={created_at}>{format(new Date(created_at), 'MMM d, yyyy · h:mm a')}</time>
           </div>
         </div>
       </div>
