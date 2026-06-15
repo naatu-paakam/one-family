@@ -131,6 +131,34 @@ export async function fetchProfile(userId) {
   return data ?? null
 }
 
+// ── Edge Functions ────────────────────────────────────────────────────────────
+
+export async function callEdgeFunction(name, body) {
+  const base = import.meta.env.VITE_SUPABASE_URL
+  const key  = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  if (!base || base.includes('placeholder')) {
+    throw new Error('Supabase not configured — set VITE_SUPABASE_URL in .env')
+  }
+
+  const res = await fetch(`${base}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // anon key authorises the call; the function itself holds the Claude key
+      'Authorization': `Bearer ${key}`,
+      'apikey': key,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Edge function "${name}" failed (${res.status})`)
+  }
+  return res.json()
+}
+
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 export async function uploadImage(file) {

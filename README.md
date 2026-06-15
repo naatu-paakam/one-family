@@ -1,8 +1,8 @@
 # 🌾 NaatuPaakam — Family News & Updates
 
-A modern, AI-powered family news web app. Admins post updates (with optional photos), Claude AI generates warm descriptions, and the family timeline keeps everyone connected.
+A modern, AI-powered family news web app. Any family member can post updates with photos, Claude AI generates warm descriptions, and the timeline keeps everyone connected.
 
-**Live:** Deployed on Netlify | **Source:** [github.com/naatu-paakam](https://github.com/naatu-paakam)
+**Live:** Deployed on Netlify | **Source:** [github.com/naatu-paakam/one-family](https://github.com/naatu-paakam/one-family)
 
 ---
 
@@ -11,108 +11,130 @@ A modern, AI-powered family news web app. Admins post updates (with optional pho
 | Feature | Details |
 |---|---|
 | 📅 Timeline | Vertical alternating timeline of family updates |
-| 🖼️ Photo updates | Admins upload images; Claude Vision generates captions |
-| ✨ AI descriptions | Claude uses last 7 days of events as context |
-| 📊 Hashtag stats | Tag cloud on home page; click any tag to filter |
-| 📝 Weekly summary | AI-generated summary refreshed on demand |
+| 🖼️ Photo posts | Any logged-in user can upload images |
+| ✨ AI descriptions | Claude Vision generates warm captions using last 7 days as context |
+| 📊 Hashtag stats | Tag cloud on home page; click to filter timeline |
+| 📝 Weekly summary | AI-generated summary, refreshable by admins |
 | 🔐 SSO login | Google + Facebook via Supabase Auth |
-| ✏️ Edit after posting | Author or admin can edit any update |
-| 🗑️ Delete | Admins can delete updates |
+| ✏️ Edit own posts | Any user can edit/delete their own posts after publishing |
+| 🛡️ Admin controls | Admins can edit or delete any post |
 
 ---
 
 ## Tech Stack
 
 ```
-Frontend  : React 18 + Vite + Tailwind CSS
-Backend   : Supabase (Auth · PostgreSQL · Storage · Edge Functions)
-AI        : Anthropic Claude (claude-sonnet-4-6) — server-side only
-Hosting   : Netlify (static build + optional Netlify Functions)
+Frontend       React 18 + Vite + Tailwind CSS  (static, hosted on Netlify)
+Backend        Supabase — Auth · PostgreSQL · Storage · Edge Functions (Deno)
+AI             Anthropic Claude claude-sonnet-4-6 — runs inside Edge Functions only
 ```
 
 ---
 
-## Security: Where the Claude API key lives
+## Security: How the Claude API key is protected
 
-> **The `ANTHROPIC_API_KEY` is never exposed to the browser.**
+> **The `ANTHROPIC_API_KEY` never touches the browser or Netlify.**
 
-Two equivalent deployment options are provided — choose one:
+The key is stored in **Supabase's secret store** and only executes inside Deno Edge Functions running on Supabase's infrastructure. The browser sends the public anon key as a bearer token to invoke the function — the Claude key is never part of the request or response.
 
-### Option A — Supabase Edge Functions (Recommended)
-The key is stored in Supabase's secret store and the Claude call happens inside a Deno edge function running on Supabase's infrastructure.
+```
+Browser  ──(anon key)──►  Supabase Edge Function  ──(ANTHROPIC_API_KEY)──►  Claude API
+                               (Deno, server-side)
+```
 
+Set it once:
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-supabase functions deploy generate-description
-supabase functions deploy generate-summary
 ```
 
-Then update the two fetch URLs in the React code:
-
-| File | Change `/api/generate-*` to |
-|---|---|
-| `src/components/AdminForm.jsx` | `https://<ref>.supabase.co/functions/v1/generate-description` |
-| `src/components/EditModal.jsx` | same |
-| `src/components/SummarySection.jsx` | `https://<ref>.supabase.co/functions/v1/generate-summary` |
-
-### Option B — Netlify Functions
-The key is stored as a Netlify environment variable (server-side) and the function runs on Netlify's infrastructure. The `/api/*` redirect in `netlify.toml` already routes calls to `/.netlify/functions/*`.
-
-Set in Netlify Dashboard → Site settings → Environment variables:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-VITE_SUPABASE_URL=https://xxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...   # for generate-summary only
-```
+That's it. No Netlify env vars, no server to manage.
 
 ---
 
 ## Local Development Setup
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
-git clone https://github.com/naatu-paakam/<repo-name>.git
-cd <repo-name>/naatupakam-family
+git clone https://github.com/naatu-paakam/one-family.git
+cd one-family
 npm install
 ```
 
 ### 2. Create a Supabase project
 
-1. Go to [supabase.com](https://supabase.com) → New Project
-2. Copy **Project URL** and **anon public** key from Settings → API
+1. [supabase.com](https://supabase.com) → New Project
+2. Copy **Project URL** and **anon public key** from Settings → API
 3. Run `supabase/schema.sql` in the SQL Editor
-4. Create storage bucket: Dashboard → Storage → New bucket → `update-images` (public)
-5. Enable OAuth providers: Authentication → Providers → Google + Facebook
+4. Create storage bucket: Storage → New bucket → `update-images` (toggle **Public**)
+5. Enable OAuth providers: Authentication → Providers → enable Google + Facebook
 
-### 3. Configure OAuth providers in Supabase
+### 3. Configure Google OAuth
 
-**Google:**
-1. [Google Cloud Console](https://console.cloud.google.com) → APIs → Credentials → OAuth 2.0 Client
-2. Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
-3. Paste Client ID + Secret into Supabase → Auth → Providers → Google
+1. [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → Create OAuth 2.0 Client ID
+2. Authorised redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
+3. Paste Client ID + Secret → Supabase → Auth → Providers → Google → Enable
 
-**Facebook:**
-1. [developers.facebook.com](https://developers.facebook.com) → My Apps → New App
+### 4. Configure Facebook OAuth
+
+1. [developers.facebook.com](https://developers.facebook.com) → My Apps → New App → Consumer
 2. Facebook Login → Settings → Valid OAuth Redirect URIs: `https://<project-ref>.supabase.co/auth/v1/callback`
-3. Paste App ID + Secret into Supabase → Auth → Providers → Facebook
+3. Paste App ID + Secret → Supabase → Auth → Providers → Facebook → Enable
 
-### 4. Set environment variables
+### 5. Set environment variables
 
 ```bash
 cp .env.example .env
-# Fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-# Do NOT put ANTHROPIC_API_KEY here — it goes in Netlify/Supabase secrets only
+# fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 ```
 
-### 5. Run locally
+### 6. Deploy Edge Functions and set the Claude secret
 
 ```bash
-npm run dev                # React dev server on http://localhost:3000
-# or
-npm run netlify:dev        # Netlify Dev (also runs functions) on http://localhost:8888
+# Install Supabase CLI: brew install supabase/tap/supabase
+supabase login
+supabase link --project-ref <your-project-ref>
+
+# Store the Claude key as a secret — server-side only, never in .env
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: override the Claude model (default: claude-sonnet-4-6)
+# supabase secrets set CLAUDE_MODEL=claude-opus-4-8
+
+# Deploy both Edge Functions
+supabase functions deploy generate-description
+supabase functions deploy generate-summary
 ```
+
+### 7. Run locally
+
+```bash
+npm run dev     # http://localhost:3000
+```
+
+---
+
+## Netlify Deployment
+
+1. Push repo to [github.com/naatu-paakam](https://github.com/naatu-paakam)
+2. Netlify → Add new site → Import from Git → select this repo
+3. Build settings are auto-detected from `netlify.toml`:
+   - Build command: `npm run build`
+   - Publish directory: `dist`
+4. Add **only these two** environment variables in Netlify → Site configuration → Environment variables:
+
+   ```
+   VITE_SUPABASE_URL       https://your-project-ref.supabase.co
+   VITE_SUPABASE_ANON_KEY  eyJ...
+   ```
+
+   > The Claude API key goes in Supabase secrets only — not in Netlify.
+
+5. Set allowed redirect URLs in Supabase → Auth → URL Configuration:
+   ```
+   Site URL:      https://your-site.netlify.app
+   Redirect URLs: https://your-site.netlify.app/**
+   ```
 
 ---
 
@@ -128,84 +150,78 @@ Full schema with RLS policies: [`supabase/schema.sql`](supabase/schema.sql)
 
 ---
 
-## Granting Admin Access
+## Permissions
 
-After the first user logs in:
+| Action | Visitor | Logged-in user | Admin |
+|---|---|---|---|
+| View timeline & posts | ✅ | ✅ | ✅ |
+| Create a post + upload image | ✗ | ✅ | ✅ |
+| Edit / delete **own** post | ✗ | ✅ | ✅ |
+| Edit / delete **any** post | ✗ | ✗ | ✅ |
+| Refresh AI weekly summary | ✗ | ✗ | ✅ |
 
-```sql
--- In Supabase SQL Editor
-UPDATE profiles SET is_admin = true WHERE id = '<paste-user-uuid>';
-```
-
-Or use the Supabase Table Editor → profiles → toggle `is_admin`.
-
-Only admins can:
-- Post new updates
-- Delete any update
-- Trigger the AI summary refresh
-- Access `/admin` route
-
-Non-admin signed-in users can:
-- Edit their own updates after they are posted
-- View all updates and details
+Permissions are enforced by **Supabase Row Level Security (RLS)** — database-level policies reject unauthorised operations even if the UI is bypassed.
 
 ---
 
-## Netlify Deployment
+## Granting Admin Access
 
-1. Push repo to [github.com/naatu-paakam](https://github.com/naatu-paakam)
-2. Netlify → New site from Git → select repo
-3. Build settings (auto-detected from `netlify.toml`):
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-4. Add environment variables (Site settings → Environment):
-   ```
-   VITE_SUPABASE_URL
-   VITE_SUPABASE_ANON_KEY
-   ANTHROPIC_API_KEY          # server-side only — safe in Netlify env vars
-   SUPABASE_SERVICE_ROLE_KEY  # for generate-summary function
-   ```
-5. Set the Supabase Auth redirect URL to your Netlify domain:
-   Supabase → Auth → URL Configuration → Site URL = `https://your-site.netlify.app`
+After the first user logs in via Google or Facebook:
+
+```sql
+-- Supabase SQL Editor
+UPDATE profiles SET is_admin = true WHERE id = '<paste-user-uuid>';
+```
+
+Or use the Table Editor → profiles → toggle `is_admin`.
+
+---
+
+## Edge Functions
+
+Both functions live in `supabase/functions/`:
+
+| Function | Trigger | What it does |
+|---|---|---|
+| `generate-description` | User clicks "✨ Generate with AI" | Receives title + image URL, fetches last 7 days of posts as context, calls Claude Vision, returns a warm 2–3 sentence description |
+| `generate-summary` | Admin clicks "↺ Refresh" | Reads all posts from the last 7 days, calls Claude, returns a weekly newsletter-style summary |
+
+Both functions read `ANTHROPIC_API_KEY` from Supabase secrets at runtime — the key never leaves Supabase's infrastructure.
 
 ---
 
 ## Project Structure
 
 ```
-naatupakam-family/
+one-family/
 ├── src/
 │   ├── components/
-│   │   ├── AdminForm.jsx       # Image upload + AI generation form
+│   │   ├── AdminForm.jsx       # Post form with image upload + AI generation
 │   │   ├── AuthModal.jsx       # Google / Facebook SSO modal
-│   │   ├── EditModal.jsx       # Edit update (with re-generate)
+│   │   ├── EditModal.jsx       # Edit post (with re-generate)
+│   │   ├── ErrorBoundary.jsx   # Catches render errors gracefully
 │   │   ├── EventCard.jsx       # Timeline card
 │   │   ├── HashtagStats.jsx    # Tag cloud + filter
 │   │   ├── Header.jsx          # Top nav + auth menu
-│   │   ├── SummarySection.jsx  # AI weekly summary
+│   │   ├── SummarySection.jsx  # AI weekly summary (admin refresh)
 │   │   └── Timeline.jsx        # Alternating vertical timeline
 │   ├── contexts/
 │   │   └── AuthContext.jsx     # Session, profile, isAdmin
 │   ├── lib/
-│   │   └── supabase.js         # All DB/storage helpers
+│   │   └── supabase.js         # DB/storage helpers + callEdgeFunction()
 │   ├── pages/
-│   │   ├── Admin.jsx           # Admin panel (guarded route)
-│   │   ├── EventDetail.jsx     # Full update view + edit/delete
+│   │   ├── Admin.jsx           # Post + manage page (any logged-in user)
+│   │   ├── EventDetail.jsx     # Full post view + edit/delete
 │   │   └── Home.jsx            # Timeline + hashtag stats + summary
 │   ├── App.jsx
 │   ├── index.css
 │   └── main.jsx
-├── netlify/
-│   └── functions/
-│       ├── generate-description.js   # Option B: Netlify Function
-│       └── generate-summary.js       # Option B: Netlify Function
 ├── supabase/
 │   ├── schema.sql
 │   └── functions/
-│       ├── generate-description/index.ts  # Option A: Supabase Edge Function
-│       └── generate-summary/index.ts      # Option A: Supabase Edge Function
-├── public/
-│   └── favicon.svg
+│       ├── generate-description/index.ts   # Claude Vision description generator
+│       └── generate-summary/index.ts       # Claude weekly summary generator
+├── public/favicon.svg
 ├── .env.example
 ├── netlify.toml
 ├── package.json
@@ -215,37 +231,27 @@ naatupakam-family/
 
 ---
 
-## Roadmap / Future Enhancements
+## Claude Model
 
-- [ ] Reactions (❤️ 🎉 😂) on updates
-- [ ] Push notifications (Web Push API)
-- [ ] Email digest via Supabase scheduled functions
+Default: **`claude-sonnet-4-6`** (fast, high quality, cost-effective).
+
+To upgrade:
+```bash
+supabase secrets set CLAUDE_MODEL=claude-opus-4-8
+```
+
+See [Anthropic model docs](https://docs.anthropic.com/en/docs/about-claude/models) for the latest model IDs.
+
+---
+
+## Roadmap
+
+- [ ] Reactions (❤️ 🎉 😂) on posts
+- [ ] Web Push notifications
+- [ ] Email digest via scheduled Edge Function
+- [ ] Video uploads
 - [ ] Multi-language support (Tamil, Telugu, …)
-- [ ] Family tree integration
-- [ ] Video uploads (Supabase Storage large files)
-- [ ] RSVP/events calendar view
-
----
-
-## Claude AI Model
-
-Default model: **`claude-sonnet-4-6`** (balances quality and cost).
-
-To switch models, set the `CLAUDE_MODEL` env var:
-```
-CLAUDE_MODEL=claude-opus-4-8   # highest quality
-CLAUDE_MODEL=claude-haiku-4-5-20251001  # fastest / lowest cost
-```
-
-See [Anthropic model docs](https://docs.anthropic.com/en/docs/about-claude/models) for the latest IDs.
-
----
-
-## Contributing
-
-1. Branch from `main`
-2. Open a PR to `naatu-paakam/<repo>`
-3. Tag the admin for review
+- [ ] Events / RSVP calendar view
 
 ---
 

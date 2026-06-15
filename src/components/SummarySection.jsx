@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { fetchLatestSummary, saveSummary } from '../lib/supabase'
+import { fetchLatestSummary, saveSummary, callEdgeFunction } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
 
@@ -16,9 +16,7 @@ export default function SummarySection() {
   async function handleGenerate() {
     setGenerating(true)
     try {
-      const res = await fetch('/api/generate-summary', { method: 'POST' })
-      if (!res.ok) throw new Error('Generation failed')
-      const { summary: text } = await res.json()
+      const { summary: text } = await callEdgeFunction('generate-summary', {})
       const saved = await saveSummary(text)
       setSummary(saved)
       toast.success('Summary refreshed!')

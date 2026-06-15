@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { updateUpdate, fetchRecentUpdates } from '../lib/supabase'
+import { updateUpdate, fetchRecentUpdates, callEdgeFunction } from '../lib/supabase'
 
 export default function EditModal({ update, onClose, onSaved }) {
   const [form, setForm] = useState({
@@ -26,18 +26,12 @@ export default function EditModal({ update, onClose, onSaved }) {
     setGenerating(true)
     try {
       const recentEvents = await fetchRecentUpdates(7)
-      const res = await fetch('/api/generate-description', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: form.title,
-          imageUrl: update.image_url,
-          hashtags: parseHashtags(form.hashtags),
-          recentEvents,
-        }),
+      const { description } = await callEdgeFunction('generate-description', {
+        title: form.title,
+        imageUrl: update.image_url,
+        hashtags: parseHashtags(form.hashtags),
+        recentEvents,
       })
-      if (!res.ok) throw new Error('Generation failed')
-      const { description } = await res.json()
       set('content', description)
       toast.success('Description regenerated!')
     } catch (e) {

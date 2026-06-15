@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { createUpdate, uploadImage, fetchRecentUpdates } from '../lib/supabase'
+import { createUpdate, uploadImage, fetchRecentUpdates, callEdgeFunction } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 const EMPTY = { title: '', content: '', hashtags: '', imageFile: null, imagePreview: null }
@@ -45,18 +45,12 @@ export default function AdminForm({ onCreated }) {
 
       const recentEvents = await fetchRecentUpdates(7)
 
-      const res = await fetch('/api/generate-description', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: form.title,
-          imageUrl: uploadedUrl,
-          hashtags: parseHashtags(form.hashtags),
-          recentEvents,
-        }),
+      const { description } = await callEdgeFunction('generate-description', {
+        title: form.title,
+        imageUrl: uploadedUrl,
+        hashtags: parseHashtags(form.hashtags),
+        recentEvents,
       })
-      if (!res.ok) throw new Error('AI generation failed')
-      const { description } = await res.json()
       set('content', description)
       if (uploadedUrl) set('imageFile', null) // already uploaded
       toast.success('Description generated!')
