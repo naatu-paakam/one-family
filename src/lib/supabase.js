@@ -4,14 +4,33 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env')
+  console.warn('⚠️  Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — running in demo mode')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(
+  supabaseUrl ?? 'https://placeholder.supabase.co',
+  supabaseAnonKey ?? 'placeholder',
+  {
+    // Disable retries so network errors fail fast (no retry storm in dev)
+    global: { fetch: (url, opts) => fetch(url, { ...opts, signal: opts?.signal }) },
+    auth: { persistSession: true, autoRefreshToken: true },
+    db: { schema: 'public' },
+    realtime: { timeout: 5000 },
+  },
+)
+
+// ── Demo-mode guard ───────────────────────────────────────────────────────────
+// Skip real fetches when credentials are absent or are the placeholder values
+const isDemo =
+  !import.meta.env.VITE_SUPABASE_URL ||
+  !import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_URL.includes('placeholder') ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY === 'placeholder'
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 
 export async function fetchUpdates({ limit = 50, offset = 0, hashtag } = {}) {
+  if (isDemo) return []
   let query = supabase
     .from('updates')
     .select('*, profiles(full_name, avatar_url)')
@@ -28,6 +47,7 @@ export async function fetchUpdates({ limit = 50, offset = 0, hashtag } = {}) {
 }
 
 export async function fetchUpdateById(id) {
+  if (isDemo) return null
   const { data, error } = await supabase
     .from('updates')
     .select('*, profiles(full_name, avatar_url)')
@@ -38,6 +58,7 @@ export async function fetchUpdateById(id) {
 }
 
 export async function fetchRecentUpdates(days = 7) {
+  if (isDemo) return []
   const since = new Date(Date.now() - days * 86400_000).toISOString()
   const { data, error } = await supabase
     .from('updates')
@@ -77,6 +98,7 @@ export async function deleteUpdate(id) {
 // ── Summaries ─────────────────────────────────────────────────────────────────
 
 export async function fetchLatestSummary() {
+  if (isDemo) return null
   const { data, error } = await supabase
     .from('summaries')
     .select('*')
@@ -100,6 +122,7 @@ export async function saveSummary(content) {
 // ── Profiles ──────────────────────────────────────────────────────────────────
 
 export async function fetchProfile(userId) {
+  if (isDemo) return null
   const { data, error } = await supabase
     .from('profiles')
     .select('*')

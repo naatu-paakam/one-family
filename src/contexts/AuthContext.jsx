@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase, fetchProfile } from '../lib/supabase'
 
+const isDemo =
+  !import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.VITE_SUPABASE_URL.includes('placeholder')
+
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -9,11 +13,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (isDemo) { setLoading(false); return }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) loadProfile(session.user.id)
       else setLoading(false)
-    })
+    }).catch(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
@@ -21,7 +27,7 @@ export function AuthProvider({ children }) {
       else { setProfile(null); setLoading(false) }
     })
 
-    return () => subscription.unsubscribe()
+    return () => subscription?.unsubscribe()
   }, [])
 
   async function loadProfile(userId) {
