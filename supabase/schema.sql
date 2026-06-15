@@ -84,23 +84,30 @@ create policy "Public profiles are viewable by everyone"
 create policy "Users can update their own profile"
   on profiles for update using (auth.uid() = id);
 
--- Updates: anyone can read; only admins can insert/update/delete
+-- Updates
 create policy "Updates are publicly readable"
   on updates for select using (true);
 
-create policy "Admins can insert updates"
+-- Any authenticated user can post
+create policy "Authenticated users can insert updates"
   on updates for insert
-  with check (exists (select 1 from profiles where id = auth.uid() and is_admin));
+  with check (auth.uid() is not null);
+
+-- Authors can edit their own posts; admins can edit any
+create policy "Authors can update their own updates"
+  on updates for update
+  using (author_id = auth.uid());
 
 create policy "Admins can update any update"
   on updates for update
   using (exists (select 1 from profiles where id = auth.uid() and is_admin));
 
-create policy "Authors can update their own updates"
-  on updates for update
+-- Authors can delete their own posts; admins can delete any
+create policy "Authors can delete their own updates"
+  on updates for delete
   using (author_id = auth.uid());
 
-create policy "Admins can delete updates"
+create policy "Admins can delete any update"
   on updates for delete
   using (exists (select 1 from profiles where id = auth.uid() and is_admin));
 
@@ -112,8 +119,10 @@ create policy "Admins can insert summaries"
   on summaries for insert
   with check (exists (select 1 from profiles where id = auth.uid() and is_admin));
 
--- Storage: images are publicly readable; only admins can upload
--- (Set in Supabase Dashboard → Storage → Policies)
+-- Storage: images are publicly readable; any authenticated user can upload
+-- In Supabase Dashboard → Storage → update-images → Policies, add:
+--   INSERT policy: (auth.uid() is not null)
+--   SELECT policy: true  (already public bucket)
 
 -- ── Grant your first admin ────────────────────────────────────────────────────
 -- After the admin user logs in for the first time, run:

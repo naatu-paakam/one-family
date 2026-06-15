@@ -21,7 +21,7 @@ export default function Header() {
           </Link>
 
           <nav className="flex items-center gap-3">
-            {isAdmin && (
+            {session && (
               <Link
                 to="/admin"
                 className="text-sm font-medium text-brand-700 hover:text-brand-900 hidden sm:block"
@@ -49,14 +49,12 @@ export default function Header() {
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-stone-200 py-1 text-sm">
                     <p className="px-4 py-2 text-stone-500 truncate">{profile?.full_name || session.user.email}</p>
                     <hr className="my-1 border-stone-100" />
-                    {isAdmin && (
-                      <button
-                        className="w-full text-left px-4 py-2 hover:bg-amber-50"
-                        onClick={() => { navigate('/admin'); setMenuOpen(false) }}
-                      >
-                        Admin Panel
-                      </button>
-                    )}
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-amber-50"
+                      onClick={() => { navigate('/admin'); setMenuOpen(false) }}
+                    >
+                      {isAdmin ? 'Admin Panel' : 'My Updates'}
+                    </button>
                     <button
                       className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600"
                       onClick={() => { signOut(); setMenuOpen(false) }}

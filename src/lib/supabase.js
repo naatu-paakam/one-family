@@ -29,7 +29,7 @@ const isDemo =
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 
-export async function fetchUpdates({ limit = 50, offset = 0, hashtag } = {}) {
+export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId } = {}) {
   if (isDemo) return []
   let query = supabase
     .from('updates')
@@ -37,9 +37,8 @@ export async function fetchUpdates({ limit = 50, offset = 0, hashtag } = {}) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (hashtag) {
-    query = query.contains('hashtags', [hashtag])
-  }
+  if (hashtag) query = query.contains('hashtags', [hashtag])
+  if (authorId) query = query.eq('author_id', authorId)
 
   const { data, error } = await query
   if (error) throw error

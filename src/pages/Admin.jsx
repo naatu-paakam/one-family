@@ -11,17 +11,18 @@ export default function Admin() {
   const navigate = useNavigate()
   const [updates, setUpdates] = useState([])
 
+  // Any logged-in user can reach this page
   useEffect(() => {
-    if (!loading && (!session || !isAdmin)) {
-      navigate('/')
-    }
-  }, [session, isAdmin, loading, navigate])
+    if (!loading && !session) navigate('/')
+  }, [session, loading, navigate])
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchUpdates({ limit: 20 }).then(setUpdates).catch(console.error)
-    }
-  }, [isAdmin])
+    if (!session) return
+    // Admins see all recent posts; regular users see only their own
+    fetchUpdates({ limit: 20, authorId: isAdmin ? undefined : session.user.id })
+      .then(setUpdates)
+      .catch(console.error)
+  }, [session, isAdmin])
 
   function handleCreated(update) {
     setUpdates(u => [update, ...u])
@@ -43,8 +44,14 @@ export default function Admin() {
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
-        <h1 className="font-display text-3xl text-stone-900 mb-1">Admin Panel</h1>
-        <p className="text-stone-500 text-sm">Post new family updates and manage existing ones.</p>
+        <h1 className="font-display text-3xl text-stone-900 mb-1">
+          {isAdmin ? 'Admin Panel' : 'My Updates'}
+        </h1>
+        <p className="text-stone-500 text-sm">
+          {isAdmin
+            ? 'Post updates and manage all family content.'
+            : 'Share a family update and manage your own posts.'}
+        </p>
       </div>
 
       <div className="card p-6">
@@ -54,7 +61,9 @@ export default function Admin() {
 
       {updates.length > 0 && (
         <div>
-          <h2 className="font-semibold text-stone-700 mb-3">Recent Updates</h2>
+          <h2 className="font-semibold text-stone-700 mb-3">
+            {isAdmin ? 'All Recent Updates' : 'My Posts'}
+          </h2>
           <div className="space-y-2">
             {updates.map(u => (
               <div key={u.id} className="card p-3 flex items-center gap-3">
