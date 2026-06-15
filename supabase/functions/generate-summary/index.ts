@@ -1,19 +1,9 @@
 /**
  * Supabase Edge Function: generate-summary
- *
- * Deploy: supabase functions deploy generate-summary
- * Secret: supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
- *
- * Reads the last 7 days of updates from Supabase and generates a weekly summary.
- * Uses the service-role key (set via supabase secrets) to bypass RLS.
- *
- * Update the fetch URL in src/components/SummarySection.jsx from:
- *   /api/generate-summary
- * to:
- *   https://<project-ref>.supabase.co/functions/v1/generate-summary
+ * Uses Google Vertex AI (Claude) via a GCP service account.
+ * Secret: supabase secrets set GCP_SERVICE_ACCOUNT_JSON='<json>'
  */
 
-import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js'
 
 const corsHeaders = {
@@ -21,12 +11,94 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function getGcpAccessToken(serviceAccountJson: string): Promise<string> {
+  const sa = JSON.parse(serviceAccountJson)
+  const now = Math.floor(Date.now() / 1000)
+  const header = { alg: 'RS256', typ: 'JWT' }
+  const payload = {
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: sa.token_uri,
+    iat: now,
+    exp: now + 3600,
+  }
+
+  const encode = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+
+  const signingInput = `${encode(header)}.${encode(payload)}`
+
+  const pemBody = sa.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\n/g, '')
+  const keyDer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0))
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', keyDer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  )
+
+  const signatureBytes = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5', cryptoKey,
+    new TextEncoder().encode(signingInput)
+  )
+
+  const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+
+  const jwt = `${signingInput}.${signature}`
+
+  const tokenRes = await fetch(sa.token_uri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  })
+  const tokenData = await tokenRes.json()
+  return tokenData.access_token
+}
+
+async function callVertexClaude(
+  accessToken: string,
+  projectId: string,
+  model: string,
+  system: string,
+  messages: object[],
+  maxTokens = 300,
+): Promise<string> {
+  const region = Deno.env.get('VERTEX_REGION') ?? 'us-east5'
+  const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${model}:rawPredict`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      anthropic_version: 'vertex-2023-10-16',
+      max_tokens: maxTokens,
+      system,
+      messages,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Vertex AI error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  return data.content[0].text.trim()
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' }), {
+  const saJson = Deno.env.get('GCP_SERVICE_ACCOUNT_JSON')
+  if (!saJson) {
+    return new Response(JSON.stringify({ error: 'GCP_SERVICE_ACCOUNT_JSON not set' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -55,22 +127,28 @@ Deno.serve(async (req) => {
     })
   }
 
-  const eventList = events.map((e: any) => `• ${e.title}${e.content ? ' — ' + e.content.slice(0, 150) : ''}`).join('\n')
+  const eventList = events
+    .map((e: any) => `• ${e.title}${e.content ? ' — ' + e.content.slice(0, 150) : ''}`)
+    .join('\n')
 
-  const client = new Anthropic({ apiKey })
-  const response = await client.messages.create({
-    model: Deno.env.get('CLAUDE_MODEL') ?? 'claude-sonnet-4-6',
-    max_tokens: 300,
-    system: 'You are a warm family newsletter writer. Keep summaries brief, joyful, and inclusive.',
-    messages: [{
-      role: 'user',
-      content: `Here are this week's family updates:\n${eventList}\n\nWrite a 3–4 sentence summary celebrating these moments.`,
-    }],
-  })
+  const projectId = JSON.parse(saJson).project_id
+  const model = Deno.env.get('CLAUDE_MODEL') ?? 'claude-sonnet-4-6'
 
-  const summary = (response.content[0] as any).text.trim()
+  try {
+    const accessToken = await getGcpAccessToken(saJson)
+    const summary = await callVertexClaude(
+      accessToken, projectId, model,
+      'You are a warm family newsletter writer. Keep summaries brief, joyful, and inclusive.',
+      [{ role: 'user', content: `Here are this week\'s family updates:\n${eventList}\n\nWrite a 3–4 sentence summary celebrating these moments.` }],
+      300,
+    )
 
-  return new Response(JSON.stringify({ summary }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
+    return new Response(JSON.stringify({ summary }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
 })

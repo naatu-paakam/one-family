@@ -6,3 +6,5 @@ dist
 .netlify
 *.log
 .DS_Store
+supabase/.temp/
+.env.supabase

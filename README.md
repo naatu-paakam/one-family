@@ -31,20 +31,44 @@ AI             Anthropic Claude claude-sonnet-4-6 — runs inside Edge Functions
 
 ---
 
-## Security: How the Claude API key is protected
+## Project Constants (Infrastructure Reference)
 
-> **The `ANTHROPIC_API_KEY` never touches the browser or Netlify.**
+| Resource | Value |
+|---|---|
+| **Supabase project** | `one-family` |
+| **Supabase project ref** | `tslvjovdqiaxedrmxdfr` |
+| **Supabase URL** | `https://tslvjovdqiaxedrmxdfr.supabase.co` |
+| **Supabase region** | `ap-southeast-1` (Singapore) |
+| **Storage bucket** | `update-images` (public) |
+| **GCP project (Vertex AI)** | `aaadpaq-acn-caledonia` |
+| **GCP project (OAuth)** | `naatupaakam` |
+| **Vertex AI region** | `us-east5` |
+| **Claude model** | `claude-sonnet-4-6` |
+| **Google OAuth Client ID** | `846814723380-1dktvcvhqtdk9ujggidc4e3co5ic7kq9.apps.googleusercontent.com` |
+| **Google OAuth redirect URI** | `https://tslvjovdqiaxedrmxdfr.supabase.co/auth/v1/callback` |
+| **GCP service account** | `pavan-claude-code@aaadpaq-acn-caledonia.iam.gserviceaccount.com` |
+| **Test user** | `test@naatupakam.family` / `Test123!` |
+| **GitHub org** | `https://github.com/naatu-paakam` |
 
-The key is stored in **Supabase's secret store** and only executes inside Deno Edge Functions running on Supabase's infrastructure. The browser sends the public anon key as a bearer token to invoke the function — the Claude key is never part of the request or response.
+> **Secrets** (stored in Supabase secrets, never in code):
+> `GCP_SERVICE_ACCOUNT_JSON` · `GOOGLE_CLIENT_SECRET`
+
+---
+
+## Security: How Claude AI calls are protected
+
+> **The GCP service account key never touches the browser or Netlify.**
+
+The key is stored in **Supabase's secret store** and only executes inside Deno Edge Functions. The browser sends the public anon key as a bearer token to invoke the function — the GCP credentials are never part of the request or response.
 
 ```
-Browser  ──(anon key)──►  Supabase Edge Function  ──(ANTHROPIC_API_KEY)──►  Claude API
-                               (Deno, server-side)
+Browser ──(anon key)──► Supabase Edge Function ──(GCP service account)──► Vertex AI ──► Claude
+                              (Deno, server-side)
 ```
 
 Set it once:
 ```bash
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+supabase secrets set GCP_SERVICE_ACCOUNT_JSON="$(cat ~/.claude/vertex-key.json)"
 ```
 
 That's it. No Netlify env vars, no server to manage.

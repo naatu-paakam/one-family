@@ -1,7 +1,23 @@
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 export default function AuthModal({ onClose }) {
   const { signInWithGoogle, signInWithFacebook } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleEmailSignIn(e) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) setError(error.message)
+    else onClose()
+    setLoading(false)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -30,6 +46,39 @@ export default function AuthModal({ onClose }) {
             </svg>
             Continue with Facebook
           </button>
+
+          <div className="relative flex items-center gap-2 my-1">
+            <div className="flex-1 border-t border-stone-200" />
+            <span className="text-xs text-stone-400">or</span>
+            <div className="flex-1 border-t border-stone-200" />
+          </div>
+
+          <form onSubmit={handleEmailSignIn} className="space-y-2">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              className="input text-sm"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="input text-sm"
+            />
+            {error && <p className="text-red-500 text-xs">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full justify-center text-sm"
+            >
+              {loading ? 'Signing in…' : 'Sign in with Email'}
+            </button>
+          </form>
         </div>
 
         <button
