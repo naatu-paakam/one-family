@@ -1,162 +1,185 @@
-# Kinfolk – Family Website
+# Family Vibes — Making Memories Together
 
-A production-ready full-stack React + Express application for families to share blogs, plan events, and build an interactive family tree with a modern, warm brand. Includes client-side AI summaries demo and a rich UI built with TailwindCSS and shadcn-style components.
+A private family app for sharing stories, planning events, and building an interactive family tree. Backed by Supabase (Postgres + Auth + Edge Functions) and deployed as a static SPA on Netlify.
 
 ## Tech Stack
 
-- React 18 + TypeScript + Vite (SPA)
-- Express (integrated with Vite for single-port dev)
-- TailwindCSS 3 with design tokens (HSL variables)
-- shadcn-style UI primitives (Radix + Tailwind)
-- TanStack Query (data fetching/cache)
-- Vitest (unit testing)
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + TypeScript + Vite |
+| Styling | TailwindCSS 3 + shadcn/Radix UI |
+| Backend / DB | Supabase (Postgres, Auth, RLS, Storage) |
+| AI | Claude via Supabase Edge Functions (server-side only) |
+| Hosting | Netlify (static SPA) |
+| CI/CD | GitHub → Netlify auto-deploy on push to `main` |
 
-## Features Implemented
+## Features
 
-- Blogs: list/filter by status/tags, create, edit, and view details
-- Events: tabs (upcoming/ongoing/past/all), search, create/edit, invite management
-- Family Tree: expandable tree, select member, edit details, add child/sibling
-- AI Summary (demo): local summarizer with keyword extraction
-- Responsive layout, shared header/footer, modern theming
+- **Stories** — write, tag, and publish family posts; attach to events; AI-generated descriptions
+- **Events** — create upcoming/ongoing/past gatherings with location; manage RSVP invites per event
+- **Family Tree** — interactive expandable tree (in-memory; Supabase-backed in Phase 2)
+- **AI Summaries** — Claude generates event descriptions and blog content via Edge Functions
+- **Auth** — email/password + Google OAuth via Supabase Auth
 
-## Monorepo Layout
+## Repo Layout
 
 ```
-client/                    # React SPA
-  App.tsx                  # Router + providers
-  pages/                   # Routes (Index, Blogs, Events, FamilyTree)
+client/                    # React SPA (Vite)
+  pages/                   # Index, Blogs, Events, FamilyTree
   components/
     layout/                # SiteHeader, SiteFooter
-    ui/                    # shadcn-style components
-    FamilyTree.tsx         # Interactive tree widget
-    AISummary.tsx          # Local demo summarizer
-server/                    # Express API
-  index.ts                 # Server setup and routes
-  routes/                  # Example handlers (demo)
-shared/                    # Shared types
-  api.ts                   # Example response interfaces
+    ui/                    # shadcn-style Radix components
+  contexts/                # AuthContext, EventContext
+  lib/
+    supabase.ts            # All Supabase queries + Edge Function calls
+supabase/
+  migrations/              # SQL migrations (applied via Supabase CLI)
+  functions/               # Edge Functions: generate-description, generate-summary
+  schema.sql               # Full DB schema + RLS policies
+public/                    # Static assets (logo, favicon)
+index.html                 # Vite entry point
+netlify.toml               # Build config + SPA redirect rule
 ```
 
-## Getting Started
+## Local Development
 
-Prerequisites: Node 18+, pnpm 8+.
+### Prerequisites
 
-Install dependencies:
+- Node 18+
+- npm
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (for migrations)
+
+### Setup
 
 ```bash
-pnpm install
+# Install dependencies
+npm install
+
+# Copy env template and fill in values
+cp .env.example .env
 ```
 
-Start dev server (client + server on one port):
+`.env` requires:
+
+```
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+> The app runs in **demo mode** (no DB calls) if these are missing — useful for UI-only work.
 
 ```bash
-pnpm dev
+# Start dev server at http://localhost:8080
+npm run dev
+
+# Production build → dist/spa/
+npm run build
 ```
 
-Build for production:
+## Database
+
+### Schema overview
+
+| Table | Purpose |
+|---|---|
+| `profiles` | One row per auth user (full_name, avatar_url) |
+| `updates` | Family stories/posts (title, content, hashtags, event link) |
+| `events` | Gatherings (title, description, location, started_at, closed_at) |
+| `invites` | Per-event RSVPs (full_name, email, status, invited_by) |
+| `summaries` | AI-generated weekly summaries |
+
+Row-Level Security is enabled on all tables. Policies allow public read; writes require `auth.uid() is not null`.
+
+### Applying migrations
 
 ```bash
-pnpm build
+# Link to your Supabase project (one-time)
+supabase link --project-ref <your-project-ref>
+
+# Push all migrations to remote
+supabase db push --linked
 ```
 
-Run production server (after build):
+Migration files live in `supabase/migrations/`. Never edit them retroactively — add a new migration file for schema changes.
+
+## AI Edge Functions
+
+Edge Functions run server-side on Supabase — the Claude API key never touches the browser or Netlify.
+
+| Function | Trigger | What it does |
+|---|---|---|
+| `generate-description` | Button click in UI | Generates a warm prose description for an event or blog post title |
+| `generate-summary` | Scheduled / manual | Summarises recent family activity into a weekly snapshot |
+
+### Secrets (set once in Supabase dashboard)
 
 ```bash
-pnpm start
+supabase secrets set ANTHROPIC_API_KEY=<your-key>
 ```
 
-Type-check and tests:
+### Deploy functions
 
 ```bash
-pnpm typecheck
-pnpm test
+supabase functions deploy generate-description
+supabase functions deploy generate-summary
 ```
-
-## Environment Variables
-
-- Server-side env is loaded via `dotenv`.
-- Public client env must be prefixed with `VITE_`.
-- Common variables you might add later (optional):
-  - `VITE_API_BASE` – override API base URL
-  - `PORT` – server port (production)
-
-Create a `.env` file at project root for local development when needed.
-
-## Routing
-
-- SPA routes are defined in `client/App.tsx` using React Router.
-- Add pages under `client/pages/` and wire them in `App.tsx`.
-- API routes are Express handlers in `server/routes/` and mounted in `server/index.ts` under `/api/*`.
-
-Example APIs (starter):
-
-- `GET /api/ping` → `{ ok: true }`
-- `GET /api/demo` → `{ message: string }`
-
-## Styling & Theming
-
-- Tailwind config expects HSL design tokens defined in `client/global.css` (e.g. `--primary: 343 88% 60%`).
-- Colors in `tailwind.config.ts` reference these tokens (`hsl(var(--primary))`).
-- Update tokens in `client/global.css` only with HSL values to avoid color drift.
-
-## UI Conventions
-
-- Prefer small, composable components; avoid deeply nested JSX trees.
-- Use `cn()` from `client/lib/utils.ts` for class merging.
-- Buttons/inputs/etc come from `client/components/ui/*`.
-- Keep shared layout (header/footer) consistent across pages.
-
-## Domain Implementation Notes
-
-- Blogs (`/blogs`)
-  - Tabs: All / Published / Drafts
-  - Search by title/author/tag
-  - Create/Edit forms in right sidebar
-  - Tags accept comma or `#` separated input
-- Events (`/events`)
-  - Tabs: Upcoming / Ongoing / Past / All (derived from start/end times)
-  - Search by title/location
-  - Circular “+” FAB-style button to create; edit in sidebar
-  - Invites: add invitee name/email; status chips shown
-- Family Tree (`/family-tree`)
-  - Click to select member; edit name/born in sidebar
-  - Add Child / Add Sibling actions; updates tree immutably
-- Home (`/`)
-  - Hero + feature cards, AI snapshot, embedded tree preview
-
-All data is currently in-memory for demo purposes. Swap to a real backend (see next section) to persist.
-
-## Persistence & Integrations (optional)
-
-- Database/Auth/Storage: Supabase or Neon + Prisma
-- Media uploads: Supabase Storage or S3-compatible
-- AI summaries: call your LLM provider server-side (never expose secrets in browser)
-
-Suggested path:
-
-1. Add models/tables (posts, events, invites, members) in your DB
-2. Implement server routes for CRUD under `/api/*`
-3. Use TanStack Query mutations/queries in the client
-4. Add optimistic updates and cache invalidation as needed
 
 ## Deployment
 
-- Standard: any Node host that runs `pnpm build && pnpm start`
-- Static adapters are not recommended (Express is required)
-- Netlify/Vercel: configure build command `pnpm build` and start/adapter as Node server
+### Netlify (production)
 
-## Coding Standards
+The app deploys automatically when `main` is updated on GitHub.
 
-- TypeScript strict mode preferred
-- Keep functions pure where possible; avoid mutating props/state
-- No TODO placeholders; write complete implementations
-- Use Vitest for unit tests; colocate specs next to source when practical
+**One-time Netlify setup:**
 
-## Accessibility
+1. Connect the GitHub repo in Netlify → _Add new site → Import from Git_
+2. Set build settings:
+   - Build command: `npm run build:client`
+   - Publish directory: `dist/spa`
+3. Add environment variables under _Site settings → Environment variables_:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. Add the Netlify domain to Supabase → _Authentication → URL Configuration → Redirect URLs_
 
-- All actionable icons (e.g., circular “+”) include `aria-label` and screen-reader text
-- Keyboard focus styles preserved via shadcn patterns
+`netlify.toml` already handles SPA routing (all paths redirect to `index.html`).
+
+### Supabase (production)
+
+| Step | Where |
+|---|---|
+| Create project | [supabase.com](https://supabase.com) |
+| Apply migrations | `supabase db push --linked` |
+| Set Edge Function secrets | Supabase dashboard → Edge Functions → Secrets |
+| Deploy Edge Functions | `supabase functions deploy <name>` |
+| Enable Google OAuth | Supabase dashboard → Authentication → Providers |
+
+### Environment variable checklist
+
+| Variable | Where to set | Required |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `.env` (local) + Netlify | Yes |
+| `VITE_SUPABASE_ANON_KEY` | `.env` (local) + Netlify | Yes |
+| `ANTHROPIC_API_KEY` | Supabase secrets only | Yes (AI features) |
+
+> **Security:** `ANTHROPIC_API_KEY` is stored exclusively in Supabase Edge Function secrets. It is never in `.env`, never in Netlify, and never shipped to the browser.
+
+## Branch & PR Workflow
+
+```
+main              ← production (auto-deploys to Netlify)
+feat/<name>       ← feature branches → PR → merge to main
+```
+
+Always open a PR against `main`. Netlify previews are generated for each PR automatically.
+
+## Test Credentials (local / staging only)
+
+| Field | Value |
+|---|---|
+| Email | `test@naatupakam.family` |
+| Password | `Test123!` |
+| Local URL | `http://localhost:8080` |
 
 ## License
 
-MIT © Kinfolk contributors
+Private — NaatuPaakam family use only.
