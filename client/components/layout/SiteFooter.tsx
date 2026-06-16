@@ -17,7 +17,7 @@ export default function SiteFooter() {
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
               <a href="/blogs" className="hover:underline">
-                Member blogs
+                Stories
               </a>
             </li>
             <li>

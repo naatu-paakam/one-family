@@ -145,7 +145,7 @@ export default function SiteHeader() {
 
   const nav = [
     { to: "/", label: "Home" },
-    { to: "/blogs", label: "Blogs" },
+    { to: "/blogs", label: "Stories" },
     { to: "/events", label: "Events" },
     { to: "/family-tree", label: "Family Tree" },
   ];

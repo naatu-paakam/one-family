@@ -122,7 +122,7 @@ export default function Blogs() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Family Blogs
+                Family Stories
               </h1>
               <p className="mt-1 text-muted-foreground">
                 Write and share stories together. Create new posts, edit drafts,
