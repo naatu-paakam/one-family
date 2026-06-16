@@ -5,7 +5,7 @@ export default function SiteFooter() {
         <div>
           <a href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-md bg-gradient-to-br from-primary to-rose-400" />
-            <span className="font-semibold">Kinfolk</span>
+            <span className="font-semibold">Family Vibes</span>
           </a>
           <p className="mt-3 text-sm text-muted-foreground max-w-sm">
             Your private home for stories, events, memories, and the family
@@ -46,7 +46,7 @@ export default function SiteFooter() {
       </div>
       <div className="border-t">
         <div className="container py-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Kinfolk. All rights reserved.
+          © {new Date().getFullYear()} NaatuPaakam · Built with ❤️ for the family
         </div>
       </div>
     </footer>

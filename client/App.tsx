@@ -13,6 +13,8 @@ import Events from "./pages/Events";
 import FamilyTree from "./pages/FamilyTree";
 import SiteHeader from "./components/layout/SiteHeader";
 import SiteFooter from "./components/layout/SiteFooter";
+import { AuthProvider } from "./contexts/AuthContext";
+import { EventProvider } from "./contexts/EventContext";
 
 const queryClient = new QueryClient();
 
@@ -21,22 +23,26 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <div className="flex min-h-screen flex-col">
-          <SiteHeader />
-          <main className="flex-1">
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/blogs" element={<Blogs />} />
-              <Route path="/events" element={<Events />} />
-              <Route path="/family-tree" element={<FamilyTree />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </main>
-          <SiteFooter />
-        </div>
-      </BrowserRouter>
+      <AuthProvider>
+        <EventProvider>
+          <BrowserRouter>
+            <div className="flex min-h-screen flex-col">
+              <SiteHeader />
+              <main className="flex-1">
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/blogs" element={<Blogs />} />
+                  <Route path="/events" element={<Events />} />
+                  <Route path="/family-tree" element={<FamilyTree />} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </main>
+              <SiteFooter />
+            </div>
+          </BrowserRouter>
+        </EventProvider>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

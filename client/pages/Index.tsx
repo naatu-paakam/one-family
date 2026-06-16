@@ -1,11 +1,35 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import AISummary from "@/components/AISummary";
 import FamilyTree from "@/components/FamilyTree";
+import { Badge } from "@/components/ui/badge";
+import { fetchUpdates } from "@/lib/supabase";
+import { useEvent } from "@/contexts/EventContext";
+import { format } from "date-fns";
+
+type Update = {
+  id: string;
+  title: string;
+  content: string | null;
+  image_url: string | null;
+  hashtags: string[];
+  created_at: string;
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
+  events: { id: string; title: string; closed_at: string | null } | null;
+};
 
 export default function Index() {
+  const { activeEvents } = useEvent();
+  const [recentPosts, setRecentPosts] = useState<Update[]>([]);
+
+  useEffect(() => {
+    fetchUpdates({ limit: 100 }).then((data) => setRecentPosts(data ?? []));
+  }, []);
+
   return (
     <div>
+      {/* Hero */}
       <section className="relative overflow-hidden border-b">
         <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/0.15),transparent_60%)]" />
         <div className="container relative py-20 md:py-28">
@@ -24,51 +48,49 @@ export default function Index() {
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button asChild size="lg">
-                  <Link to="/events">Plan for Event</Link>
+                  <Link to="/events?create=1">Plan for Event</Link>
                 </Button>
                 <Button asChild size="lg" variant="outline">
                   <Link to="/blogs">Start a Blog</Link>
                 </Button>
-                <Button asChild size="lg" variant="ghost">
+                <Button asChild size="lg" variant="outline">
                   <Link to="/family-tree">Build Family Tree</Link>
                 </Button>
               </div>
             </div>
-            <div className="relative">
-              <div className="rounded-2xl border bg-card p-4 shadow-xl">
-                <div className="rounded-xl bg-gradient-to-br from-rose-200/40 via-primary/10 to-teal-200/40 p-6">
-                  <div className="grid gap-6">
-                    <div>
-                      <div className="text-xs text-muted-foreground">
+            <div className="relative min-w-0">
+              <div className="rounded-2xl border bg-card p-3 shadow-xl">
+                <div className="rounded-xl bg-gradient-to-br from-rose-200/40 via-primary/10 to-teal-200/40 p-4">
+                  <div className="grid gap-4">
+                    {/* AI Snapshot */}
+                    <div className="rounded-lg border bg-background/80 px-3 py-2">
+                      <div className="text-xs font-medium text-muted-foreground">
                         AI Snapshot
                       </div>
-                      <p className="mt-1 text-sm">
+                      <p className="mt-0.5 text-sm leading-snug line-clamp-3">
                         Reunion picnic planned for June 14. 18 RSVPs. New posts
                         from Alex and Taylor. 42 photos added to "Grandma 80th".
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 gap-2">
                       {[
-                        { t: "Blogs", v: "268" },
-                        { t: "Events", v: "32" },
-                        { t: "Photos", v: "1.2k" },
+                        { t: "Blogs", v: recentPosts.length > 0 ? `${recentPosts.length}+` : "—" },
+                        { t: "Events", v: activeEvents.length > 0 ? activeEvents.length.toString() : "—" },
+                        { t: "Photos", v: recentPosts.filter((p) => p.image_url).length.toString() },
                       ].map((m) => (
-                        <div
-                          key={m.t}
-                          className="rounded-lg border bg-background p-3"
-                        >
-                          <div className="text-xs text-muted-foreground">
-                            {m.t}
-                          </div>
-                          <div className="text-xl font-bold">{m.v}</div>
+                        <div key={m.t} className="rounded-lg border bg-background p-2.5">
+                          <div className="text-xs text-muted-foreground">{m.t}</div>
+                          <div className="text-lg font-bold">{m.v}</div>
                         </div>
                       ))}
                     </div>
-                    <div className="rounded-xl border bg-background p-3">
-                      <div className="text-xs text-muted-foreground">
+                    {/* Family Tree */}
+                    <div className="rounded-xl border bg-background p-3 overflow-hidden">
+                      <div className="text-xs text-muted-foreground mb-2">
                         Family Tree
                       </div>
-                      <div className="mt-2 max-h-48 overflow-hidden">
+                      <div className="max-h-44 overflow-hidden">
                         <FamilyTree />
                       </div>
                     </div>
@@ -80,6 +102,7 @@ export default function Index() {
         </div>
       </section>
 
+      {/* Feature cards */}
       <section className="container py-12 md:py-16">
         <div className="grid gap-6 md:grid-cols-3">
           <FeatureCard
@@ -100,6 +123,7 @@ export default function Index() {
         </div>
       </section>
 
+      {/* AI Summary + Upcoming Events */}
       <section id="ai" className="container pb-16">
         <div className="grid gap-8 md:grid-cols-2">
           <div>
@@ -115,39 +139,48 @@ export default function Index() {
             </div>
           </div>
           <div className="rounded-2xl border bg-card p-6">
-            <h3 className="font-semibold">Upcoming Events</h3>
+            <h3 className="font-semibold">
+              {activeEvents.length > 0 ? "Active Events" : "Upcoming Events"}
+            </h3>
             <div className="mt-4 grid gap-4">
-              {[
-                {
-                  title: "June Picnic",
-                  date: "Sat, Jun 14",
-                  where: "Maple Park",
-                  attendees: 18,
-                },
-                {
-                  title: "Holiday Dinner",
-                  date: "Dec 24",
-                  where: "Grandma's House",
-                  attendees: 26,
-                },
-              ].map((e) => (
-                <div
-                  key={e.title}
-                  className="rounded-xl border bg-background p-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{e.title}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {e.date} • {e.where}
+              {activeEvents.length > 0 ? (
+                activeEvents.map((ev) => (
+                  <div key={ev.id} className="rounded-xl border bg-background p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{ev.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Started {ev.started_at ? format(new Date(ev.started_at), "MMM d") : "recently"}
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-xs rounded-full bg-muted px-3 py-1 text-muted-foreground">
-                      {e.attendees} going
+                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-xs">
+                        Live
+                      </Badge>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <>
+                  {[
+                    { title: "June Picnic", date: "Sat, Jun 14", where: "Maple Park", attendees: 18 },
+                    { title: "Holiday Dinner", date: "Dec 24", where: "Grandma's House", attendees: 26 },
+                  ].map((e) => (
+                    <div key={e.title} className="rounded-xl border bg-background p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{e.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {e.date} • {e.where}
+                          </div>
+                        </div>
+                        <div className="text-xs rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                          {e.attendees} going
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
             <Button asChild className="mt-6 w-full">
               <Link to="/events">Open Events</Link>
@@ -159,15 +192,7 @@ export default function Index() {
   );
 }
 
-function FeatureCard({
-  title,
-  desc,
-  link,
-}: {
-  title: string;
-  desc: string;
-  link: string;
-}) {
+function FeatureCard({ title, desc, link }: { title: string; desc: string; link: string }) {
   return (
     <Link
       to={link}
