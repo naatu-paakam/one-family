@@ -155,7 +155,7 @@ export default function SiteHeader() {
       <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-1.5">
-            <img src="/logo.svg" alt="Family Vibes" className="h-10 w-10 rounded-lg" />
+            <img src="/logo.png" alt="Family Vibes" className="h-10 w-10 rounded-lg object-cover" />
             <span className="font-extrabold tracking-tight text-xl">Family Vibes</span>
           </Link>
 
