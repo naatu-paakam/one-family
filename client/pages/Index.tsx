@@ -128,7 +128,7 @@ export default function Index() {
         <div className="grid gap-8 md:grid-cols-2">
           <div>
             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              Smart summaries of family activity
+              Summary of family activity
             </h2>
             <p className="mt-2 text-muted-foreground">
               Paste recent posts or updates to preview how the AI summarizes
