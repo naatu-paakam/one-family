@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="10" fill="#0d0d0d"/>
+  <!-- Teal "V" for Vibes -->
+  <text x="32" y="44" font-family="Georgia, serif" font-size="38" font-style="italic"
+        font-weight="700" fill="#6dd5c5" text-anchor="middle">V</text>
+  <!-- Pink heart top-right -->
+  <g transform="translate(46,10) scale(0.38)">
+    <path d="M20,6 C20,-4 4,-8 0,4 C-4,-8 -20,-4 -20,6 C-20,18 0,34 0,34 C0,34 20,18 20,6Z"
+          fill="#e8637a"/>
+  </g>
+  <!-- Gold heart overlapping -->
+  <g transform="translate(51,18) scale(0.48)">
+    <path d="M20,6 C20,-4 4,-8 0,4 C-4,-8 -20,-4 -20,6 C-20,18 0,34 0,34 C0,34 20,18 20,6Z"
+          fill="#f5c842"/>
+  </g>
+</svg>

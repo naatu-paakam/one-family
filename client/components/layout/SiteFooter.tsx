@@ -3,8 +3,8 @@ export default function SiteFooter() {
     <footer className="border-t bg-background">
       <div className="container py-10 grid gap-6 md:grid-cols-3">
         <div>
-          <a href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-gradient-to-br from-primary to-rose-400" />
+          <a href="/" className="flex items-center gap-1.5">
+            <img src="/logo.svg" alt="Family Vibes" className="h-7 w-7 rounded-md" />
             <span className="font-semibold">Family Vibes</span>
           </a>
           <p className="mt-3 text-sm text-muted-foreground max-w-sm">
