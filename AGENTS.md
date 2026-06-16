@@ -1,164 +1,95 @@
-# Fusion Starter
+# Family Vibes — Agent / AI Assistant Guide
 
-A production-ready full-stack React application template with integrated Express server, featuring React Router 6 SPA mode, TypeScript, Vitest, Zod and modern tooling.
+This file describes the project for AI coding agents (Claude Code, Codex, Copilot Workspace, etc.).
 
-While the starter comes with a express server, only create endpoint when strictly neccesary, for example to encapsulate logic that must leave in the server, such as private keys handling, or certain DB operations, db...
+## Project identity
 
-## Tech Stack
+**App name:** Family Vibes — Making Memories Together  
+**Repo:** `codepil/one-family`  
+**Purpose:** Private family app — stories, events, invites, family tree, AI summaries.
 
-- **PNPM**: Prefer pnpm
-- **Frontend**: React 18 + React Router 6 (spa) + TypeScript + Vite + TailwindCSS 3
-- **Backend**: Express server integrated with Vite dev server
-- **Testing**: Vitest
-- **UI**: Radix UI + TailwindCSS 3 + Lucide React icons
+## Stack (what's actually in use)
 
-## Project Structure
+| Concern | Technology |
+|---|---|
+| Frontend | React 18 + TypeScript + Vite (port 8080) |
+| Styling | TailwindCSS 3 + shadcn/Radix UI primitives |
+| Backend | Supabase (Postgres + Auth + RLS + Storage) |
+| AI | Claude (Anthropic) via Supabase Edge Functions only |
+| Hosting | Netlify static SPA |
+| Package manager | **npm** (not pnpm) |
+
+> The `server/` directory exists but is a dev-only Express stub. **Do not add API routes there.** All data access goes through `client/lib/supabase.ts` or Supabase Edge Functions.
+
+## File map — where things live
 
 ```
-client/                   # React SPA frontend
-├── pages/                # Route components (Index.tsx = home)
-├── components/ui/        # Pre-built UI component library
-├── App.tsx                # App entry point and with SPA routing setup
-└── global.css            # TailwindCSS 3 theming and global styles
-
-server/                   # Express API backend
-├── index.ts              # Main server setup (express config + routes)
-└── routes/               # API handlers
-
-shared/                   # Types used by both client & server
-└── api.ts                # Example of how to share api interfaces
+client/lib/supabase.ts          ← all DB queries (fetchUpdates, addInvite, etc.)
+client/contexts/AuthContext.tsx ← Supabase Auth session + profile
+client/contexts/EventContext.tsx← active events state
+client/pages/Index.tsx          ← home page
+client/pages/Blogs.tsx          ← stories / posts
+client/pages/Events.tsx         ← events + invite management
+client/pages/FamilyTree.tsx     ← interactive tree (in-memory)
+client/components/layout/       ← SiteHeader, SiteFooter
+supabase/migrations/            ← SQL migration files
+supabase/functions/             ← Edge Functions (Claude AI calls)
+public/                         ← static assets (logo.svg, favicon.svg)
+index.html                      ← Vite entry; publicDir = root public/
+netlify.toml                    ← build config + SPA redirect
 ```
 
-## Key Features
+## Database tables
 
-## SPA Routing System
+| Table | Key columns |
+|---|---|
+| `profiles` | id (→ auth.users), full_name, avatar_url |
+| `updates` | id, title, content, hashtags[], event_id, author_id, status |
+| `events` | id, title, description, location, started_at, closed_at, created_by |
+| `invites` | id, event_id, full_name, email, status, invited_by |
+| `summaries` | id, content, created_at |
 
-The routing system is powered by React Router 6:
+RLS is enabled on all tables. All writes require `auth.uid() is not null`.
 
-- `client/pages/Index.tsx` represents the home page.
-- Routes are defined in `client/App.tsx` using the `react-router-dom` import
-- Route files are located in the `client/pages/` directory
+## Environment variables
 
-For example, routes can be defined with:
-
-```typescript
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
-<Routes>
-  <Route path="/" element={<Index />} />
-  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-  <Route path="*" element={<NotFound />} />
-</Routes>;
+```
+VITE_SUPABASE_URL        # Required — Supabase project URL
+VITE_SUPABASE_ANON_KEY   # Required — public anon key (safe to expose)
+ANTHROPIC_API_KEY        # Supabase Edge Function secret ONLY — never in .env or Netlify
 ```
 
-### Styling System
+The app runs in **demo mode** (no DB calls) if `VITE_SUPABASE_*` vars are absent.
 
-- **Primary**: TailwindCSS 3 utility classes
-- **Theme and design tokens**: Configure in `client/global.css` 
-- **UI components**: Pre-built library in `client/components/ui/`
-- **Utility**: `cn()` function combines `clsx` + `tailwind-merge` for conditional classes
-
-```typescript
-// cn utility usage
-className={cn(
-  "base-classes",
-  { "conditional-class": condition },
-  props.className  // User overrides
-)}
-```
-
-### Express Server Integration
-
-- **Development**: Single port (8080) for both frontend/backend
-- **Hot reload**: Both client and server code
-- **API endpoints**: Prefixed with `/api/`
-
-#### Example API Routes
-- `GET /api/ping` - Simple ping api
-- `GET /api/demo` - Demo endpoint  
-
-### Shared Types
-Import consistent types in both client and server:
-```typescript
-import { DemoResponse } from '@shared/api';
-```
-
-Path aliases:
-- `@shared/*` - Shared folder
-- `@/*` - Client folder
-
-## Development Commands
+## Dev commands
 
 ```bash
-pnpm dev        # Start dev server (client + server)
-pnpm build      # Production build
-pnpm start      # Start production server
-pnpm typecheck  # TypeScript validation
-pnpm test          # Run Vitest tests
+npm install
+npm run dev        # http://localhost:8080
+npm run build      # → dist/spa/
+npm run typecheck
 ```
 
-## Adding Features
+## Key conventions
 
-### Add new colors to the theme
+- **No Express API routes.** Never add handlers to `server/`.
+- **No secrets in the browser.** `ANTHROPIC_API_KEY` lives only in Supabase secrets.
+- **Vite publicDir is the root `public/`** — static assets go there, not `client/public/`.
+- **Migrations only forward.** Never edit existing `.sql` files; add a new migration.
+- **RLS always on.** Every new table must have `alter table <t> enable row level security` and at least one policy.
+- **Demo guard.** `client/lib/supabase.ts` exports `isDemo` — skip real fetches when true.
 
-Open `client/global.css` and `tailwind.config.ts` and add new tailwind colors.
+## Adding a new feature — checklist
 
-### New API Route
-1. **Optional**: Create a shared interface in `shared/api.ts`:
-```typescript
-export interface MyRouteResponse {
-  message: string;
-  // Add other response properties here
-}
-```
+1. DB change → new file in `supabase/migrations/` → `supabase db push --linked`
+2. Query/mutation → add to `client/lib/supabase.ts`
+3. State → update or add a context in `client/contexts/`
+4. UI → add/edit page in `client/pages/` or component in `client/components/`
+5. If AI is needed → add/edit an Edge Function in `supabase/functions/`; set secret via `supabase secrets set`
 
-2. Create a new route handler in `server/routes/my-route.ts`:
-```typescript
-import { RequestHandler } from "express";
-import { MyRouteResponse } from "@shared/api"; // Optional: for type safety
+## Deployment
 
-export const handleMyRoute: RequestHandler = (req, res) => {
-  const response: MyRouteResponse = {
-    message: 'Hello from my endpoint!'
-  };
-  res.json(response);
-};
-```
-
-3. Register the route in `server/index.ts`:
-```typescript
-import { handleMyRoute } from "./routes/my-route";
-
-// Add to the createServer function:
-app.get("/api/my-endpoint", handleMyRoute);
-```
-
-4. Use in React components with type safety:
-```typescript
-import { MyRouteResponse } from '@shared/api'; // Optional: for type safety
-
-const response = await fetch('/api/my-endpoint');
-const data: MyRouteResponse = await response.json();
-```
-
-### New Page Route
-1. Create component in `client/pages/MyPage.tsx`
-2. Add route in `client/App.tsx`:
-```typescript
-<Route path="/my-page" element={<MyPage />} />
-```
-
-## Production Deployment
-
-- **Standard**: `pnpm build`
-- **Binary**: Self-contained executables (Linux, macOS, Windows)
-- **Cloud Deployment**: Use either Netlify or Vercel via their MCP integrations for easy deployment. Both providers work well with this starter template.
-
-## Architecture Notes
-
-- Single-port development with Vite + Express integration
-- TypeScript throughout (client, server, shared)
-- Full hot reload for rapid development
-- Production-ready with multiple deployment options
-- Comprehensive UI component library included
-- Type-safe API communication via shared interfaces
+- **Netlify** auto-deploys from `main`. Build: `npm run build:client`. Publish: `dist/spa`.
+- **Supabase** migrations: `supabase db push --linked`. Functions: `supabase functions deploy <name>`.
+- Required Netlify env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- Add Netlify domain to Supabase Auth redirect URLs after first deploy.
