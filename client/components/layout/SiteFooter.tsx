@@ -4,7 +4,7 @@ export default function SiteFooter() {
       <div className="container py-10 grid gap-6 md:grid-cols-3">
         <div>
           <a href="/" className="flex items-center gap-1.5">
-            <img src="/logo.png" alt="Family Vibes" className="h-7 w-7 rounded-md object-cover" />
+            <img src="/logo.svg" alt="Family Vibes" className="h-7 w-7 rounded-md" />
             <span className="font-semibold">Family Vibes</span>
           </a>
           <p className="mt-3 text-sm text-muted-foreground max-w-sm">
