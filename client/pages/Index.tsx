@@ -39,7 +39,7 @@ export default function Index() {
                 Private by default • Invite only
               </div>
               <h1 className="mt-4 text-4xl md:text-6xl font-extrabold tracking-tight">
-                Your family's home for stories, events, and the family tree
+                Your family's home for stories and events together
               </h1>
               <p className="mt-4 text-lg text-muted-foreground">
                 Write blog posts together, plan gatherings, share photos, and

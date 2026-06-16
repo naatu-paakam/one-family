@@ -8,8 +8,7 @@ export default function SiteFooter() {
             <span className="font-semibold">Family Vibes</span>
           </a>
           <p className="mt-3 text-sm text-muted-foreground max-w-sm">
-            Your private home for stories, events, memories, and the family
-            tree.
+            Your family's home for stories and events together.
           </p>
         </div>
         <div>
