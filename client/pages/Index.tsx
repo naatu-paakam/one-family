@@ -24,13 +24,17 @@ type Update = {
 };
 
 export default function Index() {
-  const { activeEvents } = useEvent();
+  const { activeEvents, loading: eventsLoading } = useEvent();
   const { activeFamilyId } = useFamily();
   const [recentPosts, setRecentPosts] = useState<Update[]>([]);
+  const [postsLoaded, setPostsLoaded] = useState(false);
   const [treeData, setTreeData] = useState<Member | undefined>(undefined);
 
   useEffect(() => {
-    fetchUpdates({ limit: 100, familyId: activeFamilyId }).then((data) => setRecentPosts(data ?? []));
+    setPostsLoaded(false);
+    fetchUpdates({ limit: 100, familyId: activeFamilyId })
+      .then((data) => setRecentPosts(data ?? []))
+      .finally(() => setPostsLoaded(true));
   }, [activeFamilyId]);
 
   useEffect(() => {
@@ -107,9 +111,9 @@ export default function Index() {
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { t: "Stories", v: recentPosts.length > 0 ? `${recentPosts.length}` : "—" },
-                        { t: "Events", v: activeEvents.length > 0 ? activeEvents.length.toString() : "—" },
-                        { t: "Photos", v: recentPosts.filter((p) => p.image_url).length.toString() },
+                        { t: "Stories", v: postsLoaded ? `${recentPosts.length}` : "—" },
+                        { t: "Events", v: !eventsLoading ? `${activeEvents.length}` : "—" },
+                        { t: "Photos", v: postsLoaded ? `${recentPosts.filter((p) => p.image_url).length}` : "—" },
                       ].map((m) => (
                         <div key={m.t} className="rounded-lg border bg-background p-2.5">
                           <div className="text-xs text-muted-foreground">{m.t}</div>
