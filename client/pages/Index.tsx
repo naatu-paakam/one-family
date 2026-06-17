@@ -67,7 +67,7 @@ export default function Index() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden border-b">
+      <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/0.15),transparent_60%)]" />
         <div className="container relative py-20 md:py-28">
           <div className="grid items-center gap-10 md:grid-cols-2">
