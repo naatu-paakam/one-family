@@ -384,6 +384,13 @@ function PostForm({
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const maxMB = file.type.startsWith("video/") ? 40 : 10;
+    if (file.size > maxMB * 1024 * 1024) {
+      setError(`File too large — max ${maxMB}MB for ${file.type.startsWith("video/") ? "videos" : "images"}. Try compressing it first.`);
+      e.target.value = "";
+      return;
+    }
+    setError("");
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   }
