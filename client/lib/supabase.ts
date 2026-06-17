@@ -29,7 +29,9 @@ const isDemo =
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 
-export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId } = {}) {
+export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId, familyId }: {
+  limit?: number; offset?: number; hashtag?: string; authorId?: string; familyId?: string | null
+} = {}) {
   if (isDemo) return []
   let query = supabase
     .from('updates')
@@ -39,6 +41,7 @@ export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId }
 
   if (hashtag) query = query.contains('hashtags', [hashtag])
   if (authorId) query = query.eq('author_id', authorId)
+  if (familyId) query = query.eq('family_id', familyId)
 
   const { data, error } = await query
   if (error) throw error
@@ -175,21 +178,25 @@ export async function uploadImage(file) {
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
-export async function fetchActiveEvents() {
+export async function fetchActiveEvents(familyId?: string | null) {
   if (isDemo) return []
-  const { data, error } = await supabase
+  let query = supabase
     .from('events')
     .select('*')
     .is('closed_at', null)
     .order('started_at', { ascending: true })
+  if (familyId) query = query.eq('family_id', familyId)
+  const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-export async function createEvent({ title, description, location = null }) {
+export async function createEvent({ title, description, location = null, familyId = null }: {
+  title: string; description?: string; location?: string | null; familyId?: string | null
+}) {
   const { data, error } = await supabase
     .from('events')
-    .insert({ title, description, location, created_by: (await supabase.auth.getUser()).data.user?.id })
+    .insert({ title, description, location, family_id: familyId, created_by: (await supabase.auth.getUser()).data.user?.id })
     .select()
     .single()
   if (error) throw error
@@ -256,4 +263,41 @@ export async function updateInviteStatus(id: string, status: string) {
 export async function deleteInvite(id: string) {
   const { error } = await supabase.from('invites').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Families ──────────────────────────────────────────────────────────────────
+
+export async function fetchMyFamilies() {
+  if (isDemo) return []
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const { data, error } = await supabase
+    .from('family_members')
+    .select('role, families(id, name, invite_code, created_by, created_at)')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map(row => ({ ...(row.families as any), role: row.role }))
+}
+
+export async function createFamily(name: string) {
+  const { data, error } = await supabase.rpc('create_family', { p_name: name })
+  if (error) throw error
+  return data as { id: string; name: string; invite_code: string; created_by: string; created_at: string }
+}
+
+export async function joinFamilyByCode(inviteCode: string) {
+  const { data, error } = await supabase.rpc('join_family_by_code', { p_invite_code: inviteCode.trim() })
+  if (error) throw error
+  return data as { id: string; name: string; invite_code: string; created_by: string; created_at: string }
+}
+
+export async function fetchFamilyMemberCount(familyId: string) {
+  if (isDemo) return 0
+  const { count, error } = await supabase
+    .from('family_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('family_id', familyId)
+  if (error) throw error
+  return count ?? 0
 }

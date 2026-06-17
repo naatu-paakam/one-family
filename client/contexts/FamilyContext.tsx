@@ -1,0 +1,68 @@
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { fetchMyFamilies } from '@/lib/supabase'
+import { useAuth } from './AuthContext'
+
+export interface Family {
+  id: string
+  name: string
+  invite_code: string
+  created_by: string | null
+  created_at: string
+  role: 'admin' | 'member'
+}
+
+interface FamilyContextValue {
+  families: Family[]
+  activeFamilyId: string | null
+  activeFamily: Family | null
+  setActiveFamilyId: (id: string) => void
+  reload: () => Promise<void>
+  loading: boolean
+}
+
+const FamilyContext = createContext<FamilyContextValue | null>(null)
+
+export function FamilyProvider({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth()
+  const [families, setFamilies] = useState<Family[]>([])
+  const [activeFamilyId, setActiveFamilyIdState] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    if (!session) { setFamilies([]); setActiveFamilyIdState(null); return }
+    setLoading(true)
+    try {
+      const data = await fetchMyFamilies() as Family[]
+      setFamilies(data)
+      // Restore last active family from localStorage, else pick first
+      const stored = localStorage.getItem('activeFamilyId')
+      const valid = data.find(f => f.id === stored)
+      setActiveFamilyIdState(valid ? valid.id : data[0]?.id ?? null)
+    } catch (e) {
+      console.error('Failed to load families', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [session])
+
+  const setActiveFamilyId = (id: string) => {
+    localStorage.setItem('activeFamilyId', id)
+    setActiveFamilyIdState(id)
+  }
+
+  const activeFamily = families.find(f => f.id === activeFamilyId) ?? null
+
+  return (
+    <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, setActiveFamilyId, reload: load, loading }}>
+      {children}
+    </FamilyContext.Provider>
+  )
+}
+
+export function useFamily() {
+  const ctx = useContext(FamilyContext)
+  if (!ctx) throw new Error('useFamily must be used within FamilyProvider')
+  return ctx
+}

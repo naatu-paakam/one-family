@@ -21,7 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
-import { LogOut, PenSquare, CalendarPlus } from "lucide-react"; // PenSquare/CalendarPlus used in dropdown
+import { LogOut, PenSquare, CalendarPlus } from "lucide-react";
+import FamilyMenu from "./FamilyMenu";
 
 function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { signInWithGoogle, signInWithEmail } = useAuth();
@@ -178,6 +179,7 @@ export default function SiteHeader() {
 
             {session ? (
               <>
+                <FamilyMenu />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">

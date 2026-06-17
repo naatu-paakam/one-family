@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { fetchActiveEvents, createEvent, closeEvent } from '@/lib/supabase'
+import { useFamily } from './FamilyContext'
 
 interface FamilyEvent {
   id: string
@@ -10,6 +11,7 @@ interface FamilyEvent {
   closed_at: string | null
   created_by: string
   created_at: string
+  family_id: string | null
 }
 
 interface EventContextValue {
@@ -25,22 +27,23 @@ const EventContext = createContext<EventContextValue | null>(null)
 export function EventProvider({ children }: { children: ReactNode }) {
   const [activeEvents, setActiveEvents] = useState<FamilyEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const { activeFamilyId } = useFamily()
 
   const refresh = useCallback(async () => {
     try {
-      const events = await fetchActiveEvents()
+      const events = await fetchActiveEvents(activeFamilyId)
       setActiveEvents(events)
     } catch (e) {
       console.error('EventContext:', e)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeFamilyId])
 
   useEffect(() => { refresh() }, [refresh])
 
   async function startEvent({ title, description, location }: { title: string; description: string; location?: string }) {
-    const ev = await createEvent({ title, description, location })
+    const ev = await createEvent({ title, description, location, familyId: activeFamilyId })
     setActiveEvents(prev => [...prev, ev])
     return ev
   }

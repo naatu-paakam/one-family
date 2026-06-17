@@ -15,6 +15,7 @@ import SiteHeader from "./components/layout/SiteHeader";
 import SiteFooter from "./components/layout/SiteFooter";
 import { AuthProvider } from "./contexts/AuthContext";
 import { EventProvider } from "./contexts/EventContext";
+import { FamilyProvider } from "./contexts/FamilyContext";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
+        <FamilyProvider>
         <EventProvider>
           <BrowserRouter>
             <div className="flex min-h-screen flex-col">
@@ -42,6 +44,7 @@ const App = () => (
             </div>
           </BrowserRouter>
         </EventProvider>
+        </FamilyProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

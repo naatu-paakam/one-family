@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import {
   fetchUpdates,
   createUpdate,
@@ -64,6 +65,7 @@ function tabOf(p: Update): "published" | "draft" {
 export default function Blogs() {
   const { session, isAdmin, openAuthModal } = useAuth();
   const { activeEvents } = useEvent();
+  const { activeFamilyId } = useFamily();
 
   const [posts, setPosts] = useState<Update[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export default function Blogs() {
   async function loadPosts() {
     setLoading(true);
     try {
-      const data = await fetchUpdates({ limit: 100 });
+      const data = await fetchUpdates({ limit: 100, familyId: activeFamilyId });
       setPosts(data ?? []);
       if (!selectedId && data?.length) setSelectedId(data[0].id);
     } finally {
@@ -83,7 +85,7 @@ export default function Blogs() {
     }
   }
 
-  useEffect(() => { loadPosts(); }, []); // eslint-disable-line
+  useEffect(() => { loadPosts(); }, [activeFamilyId]); // eslint-disable-line
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
