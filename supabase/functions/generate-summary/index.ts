@@ -108,12 +108,17 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
+  const body = await req.json().catch(() => ({}))
+  const familyId: string | undefined = body.familyId
+
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
-  const { data: events, error } = await supabase
+  let query = supabase
     .from('updates')
     .select('title, content, hashtags, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: true })
+  if (familyId) query = query.eq('family_id', familyId)
+  const { data: events, error } = await query
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {

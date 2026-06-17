@@ -166,7 +166,7 @@ export default function Index() {
               Auto-generated from your family's recent stories and events.
             </p>
             <div className="mt-6">
-              <AISummary posts={recentPosts} eventCount={activeEvents.length} />
+              <AISummary posts={recentPosts} eventCount={activeEvents.length} familyId={activeFamilyId} />
             </div>
           </div>
           <div className="rounded-2xl border bg-card p-6">
