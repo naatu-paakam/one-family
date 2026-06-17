@@ -6,6 +6,7 @@ import FamilyTree from "@/components/FamilyTree";
 import { Badge } from "@/components/ui/badge";
 import { CalendarPlus } from "lucide-react";
 import { fetchUpdates, fetchFamilyTree } from "@/lib/supabase";
+import { useMemo } from "react";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
 import { type Member } from "@/components/FamilyTree";
@@ -36,6 +37,28 @@ export default function Index() {
     if (!activeFamilyId) { setTreeData(undefined); return; }
     fetchFamilyTree(activeFamilyId).then((data) => setTreeData(data as Member ?? undefined));
   }, [activeFamilyId]);
+
+  const aiSnapshot = useMemo(() => {
+    const photoCount = recentPosts.filter((p) => p.image_url).length;
+    const storyCount = recentPosts.length;
+    const eventCount = activeEvents.length;
+    const hasTree = !!treeData;
+    const parts: string[] = [];
+
+    if (eventCount > 0)
+      parts.push(`${eventCount} active event${eventCount > 1 ? "s" : ""} happening now.`);
+    if (storyCount > 0)
+      parts.push(`${storyCount} stor${storyCount > 1 ? "ies" : "y"} shared by your family.`);
+    if (photoCount > 0)
+      parts.push(`${photoCount} photo${photoCount > 1 ? "s" : ""} captured so far.`);
+    if (hasTree)
+      parts.push("Family tree is growing.");
+
+    if (parts.length === 0)
+      return "Your family space is ready! Start by adding a story, planning an event, or building your family tree — every memory begins with a first step. 🌱";
+
+    return parts.join(" ");
+  }, [recentPosts, activeEvents, treeData]);
 
   return (
     <div>
@@ -78,8 +101,7 @@ export default function Index() {
                         AI Snapshot
                       </div>
                       <p className="mt-0.5 text-sm leading-snug line-clamp-3">
-                        Reunion picnic planned for June 14. 18 RSVPs. New posts
-                        from Alex and Taylor. 42 photos added to "Grandma 80th".
+                        {aiSnapshot}
                       </p>
                     </div>
                     {/* Stats */}
