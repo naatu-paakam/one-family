@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import AISummary from "@/components/AISummary";
 import FamilyTree from "@/components/FamilyTree";
 import { Badge } from "@/components/ui/badge";
-import { fetchUpdates } from "@/lib/supabase";
+import { fetchUpdates, fetchFamilyTree } from "@/lib/supabase";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
+import { type Member } from "@/components/FamilyTree";
 import { format } from "date-fns";
 
 type Update = {
@@ -24,9 +25,15 @@ export default function Index() {
   const { activeEvents } = useEvent();
   const { activeFamilyId } = useFamily();
   const [recentPosts, setRecentPosts] = useState<Update[]>([]);
+  const [treeData, setTreeData] = useState<Member | undefined>(undefined);
 
   useEffect(() => {
     fetchUpdates({ limit: 100, familyId: activeFamilyId }).then((data) => setRecentPosts(data ?? []));
+  }, [activeFamilyId]);
+
+  useEffect(() => {
+    if (!activeFamilyId) { setTreeData(undefined); return; }
+    fetchFamilyTree(activeFamilyId).then((data) => setTreeData(data as Member ?? undefined));
   }, [activeFamilyId]);
 
   return (
@@ -93,7 +100,7 @@ export default function Index() {
                         Family Tree
                       </div>
                       <div className="max-h-44 overflow-hidden">
-                        <FamilyTree />
+                        <FamilyTree data={treeData} />
                       </div>
                     </div>
                   </div>
