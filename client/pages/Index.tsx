@@ -6,6 +6,7 @@ import FamilyTree from "@/components/FamilyTree";
 import { Badge } from "@/components/ui/badge";
 import { fetchUpdates } from "@/lib/supabase";
 import { useEvent } from "@/contexts/EventContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { format } from "date-fns";
 
 type Update = {
@@ -21,11 +22,12 @@ type Update = {
 
 export default function Index() {
   const { activeEvents } = useEvent();
+  const { activeFamilyId } = useFamily();
   const [recentPosts, setRecentPosts] = useState<Update[]>([]);
 
   useEffect(() => {
-    fetchUpdates({ limit: 100 }).then((data) => setRecentPosts(data ?? []));
-  }, []);
+    fetchUpdates({ limit: 100, familyId: activeFamilyId }).then((data) => setRecentPosts(data ?? []));
+  }, [activeFamilyId]);
 
   return (
     <div>
@@ -75,7 +77,7 @@ export default function Index() {
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { t: "Blogs", v: recentPosts.length > 0 ? `${recentPosts.length}+` : "—" },
+                        { t: "Stories", v: recentPosts.length > 0 ? `${recentPosts.length}` : "—" },
                         { t: "Events", v: activeEvents.length > 0 ? activeEvents.length.toString() : "—" },
                         { t: "Photos", v: recentPosts.filter((p) => p.image_url).length.toString() },
                       ].map((m) => (

@@ -91,7 +91,8 @@ Sign in with:
    - "Close Event" button visible only to event creator
 
 5. **Family Tree page** (`/family-tree`)
-   - Tree renders (in-memory sample data — Supabase not yet wired)
+   - Tree loads from Supabase (`family_trees` table) scoped to the active family
+   - Auto-saves with 800 ms debounce; "Saving…" indicator while pending
    - Expand/collapse, edit name/born, add child/sibling work
 
 6. **AI generation**
@@ -101,7 +102,6 @@ Sign in with:
 
 ### Notes
 - Google OAuth cannot be automated — test manually
-- Family Tree is still in-memory (Phase 2 will add Supabase table)
 - AI Edge Functions require `ANTHROPIC_API_KEY` set via `supabase secrets set`
 
 ## Deploy to Netlify

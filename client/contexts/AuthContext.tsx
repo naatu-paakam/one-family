@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { Session, User } from '@supabase/supabase-js'
-import { supabase, fetchProfile } from '@/lib/supabase'
+import { supabase, fetchProfile, callEdgeFunction } from '@/lib/supabase'
 
 const isDemo =
   !import.meta.env.VITE_SUPABASE_URL ||
@@ -45,10 +45,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else setLoading(false)
     }).catch(() => setLoading(false))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
-      if (session) loadProfile(session.user.id, session.user.user_metadata)
-      else { setProfile(null); setLoading(false) }
+      if (session) {
+        loadProfile(session.user.id, session.user.user_metadata)
+        // Trigger a fresh AI summary on every real sign-in (not on session restore)
+        if (event === 'SIGNED_IN') {
+          callEdgeFunction('generate-summary', {}).catch(() => {/* best-effort */})
+        }
+      } else {
+        setProfile(null); setLoading(false)
+      }
     })
 
     return () => subscription?.unsubscribe()

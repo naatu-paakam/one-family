@@ -200,6 +200,7 @@ export default function Blogs() {
               <PostForm
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
+                familyId={activeFamilyId}
                 onCancel={cancel}
                 onSave={async (payload) => {
                   const created = await createUpdate(payload);
@@ -216,6 +217,7 @@ export default function Blogs() {
                 post={selected}
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
+                familyId={activeFamilyId}
                 onCancel={cancel}
                 onSave={async (payload) => {
                   const updated = await updateUpdate(selected.id, payload);
@@ -350,6 +352,7 @@ function PostForm({
   post,
   activeEvents,
   authorId,
+  familyId,
   onCancel,
   onSave,
   onDelete,
@@ -357,6 +360,7 @@ function PostForm({
   post?: Update;
   activeEvents: { id: string; title: string }[];
   authorId: string;
+  familyId: string | null;
   onCancel: () => void;
   onSave: (p: FormPayload) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -385,7 +389,7 @@ function PostForm({
     try {
       let uploadedUrl: string | null = null;
       if (imageFile) {
-        uploadedUrl = await uploadImage(imageFile);
+        uploadedUrl = await uploadImage(imageFile, familyId);
         setImagePreview(uploadedUrl);
         setImageFile(null);
       }
@@ -410,7 +414,7 @@ function PostForm({
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        imageUrl = await uploadImage(imageFile, familyId);
       } else if (imagePreview?.startsWith("http")) {
         imageUrl = imagePreview;
       }

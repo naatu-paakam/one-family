@@ -17,7 +17,7 @@ A private family app for sharing stories, planning events, and building an inter
 
 - **Stories** — write, tag, and publish family posts; attach to events; AI-generated descriptions
 - **Events** — create upcoming/ongoing/past gatherings with location; manage RSVP invites per event
-- **Family Tree** — interactive expandable tree (in-memory; Supabase-backed in Phase 2)
+- **Family Tree** — interactive expandable tree, persisted per-family in Supabase (`family_trees` table)
 - **AI Summaries** — Claude generates event descriptions and blog content via Edge Functions
 - **Auth** — email/password + Google OAuth via Supabase Auth
 

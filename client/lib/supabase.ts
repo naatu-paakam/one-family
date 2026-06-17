@@ -164,15 +164,16 @@ export async function callEdgeFunction(name, body) {
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
-export async function uploadImage(file) {
+export async function uploadImage(file, familyId?: string | null) {
   const ext = file.name.split('.').pop()
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const basename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const path = familyId ? `${familyId}/${basename}` : `shared/${basename}`
   const { error } = await supabase.storage
     .from('update-images')
-    .upload(filename, file, { cacheControl: '3600', upsert: false })
+    .upload(path, file, { cacheControl: '3600', upsert: false })
   if (error) throw error
 
-  const { data } = supabase.storage.from('update-images').getPublicUrl(filename)
+  const { data } = supabase.storage.from('update-images').getPublicUrl(path)
   return data.publicUrl
 }
 
