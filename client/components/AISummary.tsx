@@ -11,40 +11,29 @@ function summarize(posts: Post[], eventCount: number) {
 
   const sentences: string[] = [];
 
-  if (eventCount > 0)
-    sentences.push(
-      `There ${eventCount === 1 ? "is" : "are"} ${eventCount} active event${eventCount > 1 ? "s" : ""} happening right now.`,
-    );
-
   const authors = [
     ...new Set(posts.map((p) => p.profiles?.full_name).filter(Boolean)),
   ] as string[];
-  if (authors.length > 0)
+
+  if (eventCount > 0 && posts.length > 0) {
+    const names = authors.slice(0, 2).join(" and ");
     sentences.push(
-      `Recent posts from ${authors.slice(0, 3).join(", ")}${authors.length > 3 ? " and others" : ""}.`,
+      `Your family is buzzing! ${names ? `${names} ${authors.length > 1 ? "have" : "has"} been sharing stories` : "Stories are being shared"} and ${eventCount > 1 ? `${eventCount} events are` : "an event is"} bringing everyone together. 🎉`,
     );
+  } else if (eventCount > 0) {
+    sentences.push(
+      `Something exciting is happening — ${eventCount > 1 ? `${eventCount} events are` : "an event is"} bringing your family together right now. Don't miss it! 🎊`,
+    );
+  } else if (posts.length > 0) {
+    const names = authors.slice(0, 2).join(" and ");
+    sentences.push(
+      `${names ? `${names} ${authors.length > 1 ? "have" : "has"} been adding to` : "Your family is building"} your family's story — keep the memories coming! 📖`,
+    );
+    if (posts.length >= 3)
+      sentences.push(`With ${posts.length} stories shared, your family archive is growing beautifully.`);
+  }
 
-  const allText = posts
-    .map((p) => [p.title, p.content].filter(Boolean).join(" "))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const stop = new Set([
-    "the","a","an","and","or","but","to","of","in","on","for","with",
-    "at","by","from","is","it","that","we","our","are","was","has","have",
-    "this","their","they","been","be","as","an","so","no","if","its",
-  ]);
-  const words = allText.toLowerCase().match(/[a-z']{3,}/g) || [];
-  const freq = new Map<string, number>();
-  for (const w of words)
-    if (!stop.has(w)) freq.set(w, (freq.get(w) || 0) + 1);
-  const keywords = [...freq.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([w]) => w);
-
-  return { sentences, keywords };
+  return { sentences };
 }
 
 export default function AISummary({
@@ -60,28 +49,11 @@ export default function AISummary({
     <div className="rounded-xl border bg-card p-5 shadow-sm">
       <h3 className="font-semibold">Family Activity Summary</h3>
       {result ? (
-        <>
-          <div className="mt-3 text-sm space-y-1">
-            {result.sentences.map((s, i) => (
-              <p key={i} className="text-foreground leading-snug">{s}</p>
-            ))}
-          </div>
-          {result.keywords.length > 0 && (
-            <div className="mt-4 text-sm">
-              <div className="text-muted-foreground mb-2">Top topics</div>
-              <div className="flex flex-wrap gap-2">
-                {result.keywords.map((k) => (
-                  <span
-                    key={k}
-                    className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground capitalize"
-                  >
-                    {k}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <div className="mt-3 text-sm space-y-2">
+          {result.sentences.map((s, i) => (
+            <p key={i} className="text-foreground leading-relaxed">{s}</p>
+          ))}
+        </div>
       ) : (
         <p className="mt-3 text-sm text-muted-foreground leading-snug">
           No activity yet — once your family adds stories or starts events, highlights will appear here automatically.
