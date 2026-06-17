@@ -292,6 +292,29 @@ export async function joinFamilyByCode(inviteCode: string) {
   return data as { id: string; name: string; invite_code: string; created_by: string; created_at: string }
 }
 
+// ── Family Trees ──────────────────────────────────────────────────────────────
+
+export async function fetchFamilyTree(familyId: string) {
+  if (isDemo) return null
+  const { data, error } = await supabase
+    .from('family_trees')
+    .select('tree_data')
+    .eq('family_id', familyId)
+    .maybeSingle()
+  if (error) throw error
+  return data?.tree_data ?? null
+}
+
+export async function saveFamilyTree(familyId: string, treeData: object) {
+  const { error } = await supabase
+    .from('family_trees')
+    .upsert({ family_id: familyId, tree_data: treeData, updated_at: new Date().toISOString() },
+             { onConflict: 'family_id' })
+  if (error) throw error
+}
+
+// ── Family Members ────────────────────────────────────────────────────────────
+
 export async function fetchFamilyMemberCount(familyId: string) {
   if (isDemo) return 0
   const { count, error } = await supabase
