@@ -32,9 +32,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     if (!session) { setFamilies([]); setActiveFamilyIdState(null); return }
     setLoading(true)
     try {
-      const data = await fetchMyFamilies() as Family[]
+      const raw = await fetchMyFamilies() as Family[]
+      const data = [...raw].sort((a, b) => a.name.localeCompare(b.name))
       setFamilies(data)
-      // Restore last active family from localStorage, else pick first
+      // Restore last active family from localStorage, else default to first alphabetically
       const stored = localStorage.getItem('activeFamilyId')
       const valid = data.find(f => f.id === stored)
       setActiveFamilyIdState(valid ? valid.id : data[0]?.id ?? null)
