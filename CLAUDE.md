@@ -62,40 +62,60 @@ Sign in with:
 
 ### Checklist
 
-1. **Home page**
-   - Loads without errors; real posts/events from Supabase (not sample data)
-   - Active events appear as amber badges in the header banner
-   - Hero tagline, feature cards, and AI summary section render correctly
+1. **Home page — family with data (use NaatuPaakam)**
+   - AI Snapshot shows real counts: e.g. "1 active event happening now. 5 stories shared by your family. 1 photo captured so far. Family tree is growing."
+   - Hero stat cards: Stories = real count, Events = real count, Photos = real count (no "5+" or fake values)
+   - Family Tree preview renders the active family's real tree (not the hardcoded Pat & Jordan sample)
+   - Events section shows real active events with amber "Live" badge; heading reads "Active Events"
+   - Active event pills appear in the header banner
+   - Active family name badge (❤️ FamilyName) visible next to logo
 
-2. **Header / Auth**
+2. **Home page — empty family (regression: create a fresh family)**
+   - AI Snapshot shows encouraging message: "Your family space is ready! Start by adding a story, planning an event, or building your family tree — every memory begins with a first step. 🌱"
+   - Hero stat cards: Stories —, Events —, Photos 0
+   - Family Tree preview shows the fallback sample tree (no family tree saved yet)
+   - Events section shows empty state: "No active events yet. Plan one for your family!"
+   - No live event banner in header
+   - Family name badge updates to the new family name immediately
+
+3. **Family isolation — switching families**
+   - Switch from NaatuPaakam → Sharma Side: all hero stats, tree, events, and AI Snapshot update to Sharma Side data
+   - Switch back to NaatuPaakam: all values restore correctly
+   - Stories page only shows posts for the active family
+   - Events page only shows events for the active family
+   - Family tree page loads the correct family's tree
+
+4. **Header / Auth**
    - "Join Family" button visible when logged out
    - Sign-in modal: email/password + Google OAuth button
-   - After sign-in: avatar appears, "Plan for Event" button visible
-   - Active event pills appear below header when events exist
-   - Sign out clears session
+   - After sign-in: avatar appears, "Plan for Event" button visible, active family badge appears
+   - Active event pills appear below header when events exist for the active family
+   - Sign out clears session and removes family badge
 
-3. **Stories page** (`/blogs`)
-   - Posts load from Supabase (All / Published / Drafts tabs)
+5. **Stories page** (`/blogs`)
+   - Posts load from Supabase scoped to active family (All / Published / Drafts tabs)
    - Clicking a card shows detail in right panel
    - Event badge (🎉 EventName) shown on event-linked posts
    - When signed in: "New Post" button visible
    - Create post: title required; AI generate button populates content
    - Edit/delete only shown if user is author
+   - Images upload to `{familyId}/{filename}` path in storage bucket
 
-4. **Events page** (`/events`)
-   - Upcoming / Ongoing / Past / All tabs filter correctly
+6. **Events page** (`/events`)
+   - Upcoming / Ongoing / Past / All tabs filter correctly for active family
    - Event card shows invite counts (invited / going / pending)
    - Detail panel shows full description, Modify Event, Add Invite form
    - Create event via "+" FAB; AI description generate works
    - Invite status dropdown (invited → accepted/declined) saves to Supabase
    - "Close Event" button visible only to event creator
 
-5. **Family Tree page** (`/family-tree`)
+7. **Family Tree page** (`/family-tree`)
    - Tree loads from Supabase (`family_trees` table) scoped to the active family
    - Auto-saves with 800 ms debounce; "Saving…" indicator while pending
    - Expand/collapse, edit name/born, add child/sibling work
+   - Switching families loads the new family's tree without page reload
 
-6. **AI generation**
+8. **AI generation**
    - Events: enter title + location → "✨ Generate with AI" → prose description fills in
    - Stories: enter title → "✨ Generate with AI" → prose content fills in
    - Both call the `generate-description` Edge Function (requires `ANTHROPIC_API_KEY` secret set)
@@ -103,6 +123,7 @@ Sign in with:
 ### Notes
 - Google OAuth cannot be automated — test manually
 - AI Edge Functions require `ANTHROPIC_API_KEY` set via `supabase secrets set`
+- Test families used: **NaatuPaakam** (has data), **Sharma Side** (tree only), **Empty Test Family** (blank)
 
 ## Deploy to Netlify
 
