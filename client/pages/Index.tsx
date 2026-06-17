@@ -69,7 +69,7 @@ export default function Index() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/0.15),transparent_60%)]" />
-        <div className="container relative py-20 md:py-28">
+        <div className="container relative py-12 md:py-16">
           <div className="grid items-center gap-10 md:grid-cols-2">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
@@ -139,7 +139,7 @@ export default function Index() {
       </section>
 
       {/* AI Summary + Upcoming Events */}
-      <section id="ai" className="container py-12 md:py-16">
+      <section id="ai" className="container pt-6 pb-12 md:pb-16">
         <div className="grid gap-8 md:grid-cols-2">
           <div>
             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
