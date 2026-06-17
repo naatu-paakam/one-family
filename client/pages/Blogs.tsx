@@ -467,27 +467,33 @@ function PostForm({
       {/* Photo / Video */}
       <div className="grid gap-1">
         <span className="text-xs text-muted-foreground">Photo or Video (optional)</span>
-        <div
-          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <label className="block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition">
           {imagePreview ? (
             imageFile?.type.startsWith("video/") || isVideoUrl(imagePreview) ? (
-              <video src={imagePreview} controls className="max-h-28 mx-auto rounded-md" />
+              <video src={imagePreview} className="max-h-28 mx-auto rounded-md pointer-events-none" />
             ) : (
               <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
             )
           ) : (
             <span className="text-xs text-muted-foreground">Click to upload a photo or video</span>
           )}
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={handleFile}
-        />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="sr-only"
+            onChange={handleFile}
+          />
+        </label>
+        {imagePreview && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-destructive text-right"
+            onClick={() => { setImagePreview(""); setImageFile(null); }}
+          >
+            Remove
+          </button>
+        )}
       </div>
 
       {/* Title */}
