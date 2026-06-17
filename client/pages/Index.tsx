@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import AISummary from "@/components/AISummary";
 import FamilyTree from "@/components/FamilyTree";
 import { Badge } from "@/components/ui/badge";
+import { CalendarPlus } from "lucide-react";
 import { fetchUpdates, fetchFamilyTree } from "@/lib/supabase";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -149,7 +150,7 @@ export default function Index() {
           </div>
           <div className="rounded-2xl border bg-card p-6">
             <h3 className="font-semibold">
-              {activeEvents.length > 0 ? "Active Events" : "Upcoming Events"}
+              {activeEvents.length > 0 ? "Active Events" : "Events"}
             </h3>
             <div className="mt-4 grid gap-4">
               {activeEvents.length > 0 ? (
@@ -169,26 +170,11 @@ export default function Index() {
                   </div>
                 ))
               ) : (
-                <>
-                  {[
-                    { title: "June Picnic", date: "Sat, Jun 14", where: "Maple Park", attendees: 18 },
-                    { title: "Holiday Dinner", date: "Dec 24", where: "Grandma's House", attendees: 26 },
-                  ].map((e) => (
-                    <div key={e.title} className="rounded-xl border bg-background p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{e.title}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {e.date} • {e.where}
-                          </div>
-                        </div>
-                        <div className="text-xs rounded-full bg-muted px-3 py-1 text-muted-foreground">
-                          {e.attendees} going
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </>
+                <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                  <CalendarPlus className="h-8 w-8 mb-2 opacity-30" />
+                  <p className="text-sm">No active events yet.</p>
+                  <p className="text-xs mt-1">Plan one for your family!</p>
+                </div>
               )}
             </div>
             <Button asChild className="mt-6 w-full">
