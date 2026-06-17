@@ -762,7 +762,7 @@ function CommentForm({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2">
         <Button size="sm" onClick={handleSubmit} disabled={saving}>
           {saving && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
           Post
@@ -771,7 +771,7 @@ function CommentForm({
           type="button"
           onClick={handleGenerate}
           disabled={generating}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+          className="ml-auto flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
         >
           {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
           {generating ? "Generating…" : "✨ AI"}
