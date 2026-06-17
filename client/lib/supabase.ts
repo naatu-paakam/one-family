@@ -325,3 +325,68 @@ export async function fetchFamilyMemberCount(familyId: string) {
   if (error) throw error
   return count ?? 0
 }
+
+// ── Comments ──────────────────────────────────────────────────────────────────
+
+const COMMENT_SELECT = '*, profiles!comments_author_id_fkey(full_name, avatar_url), comment_reactions(comment_id, user_id, emoji)'
+
+export async function fetchComments(eventId: string) {
+  if (isDemo) return []
+  const { data, error } = await supabase
+    .from('comments')
+    .select(COMMENT_SELECT)
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createComment(payload: {
+  event_id: string
+  author_id: string
+  family_id: string
+  content: string | null
+  image_url: string | null
+  parent_id: string | null
+}) {
+  const { data, error } = await supabase
+    .from('comments')
+    .insert(payload)
+    .select(COMMENT_SELECT)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteComment(id: string) {
+  const { error } = await supabase.from('comments').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function toggleReaction(commentId: string, userId: string, emoji: string) {
+  // Check if reaction exists
+  const { data: existing } = await supabase
+    .from('comment_reactions')
+    .select('*')
+    .eq('comment_id', commentId)
+    .eq('user_id', userId)
+    .eq('emoji', emoji)
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await supabase
+      .from('comment_reactions')
+      .delete()
+      .eq('comment_id', commentId)
+      .eq('user_id', userId)
+      .eq('emoji', emoji)
+    if (error) throw error
+    return false // removed
+  } else {
+    const { error } = await supabase
+      .from('comment_reactions')
+      .insert({ comment_id: commentId, user_id: userId, emoji })
+    if (error) throw error
+    return true // added
+  }
+}
