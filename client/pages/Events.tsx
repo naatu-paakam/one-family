@@ -432,6 +432,24 @@ function CommentThread({
         Comments {comments.length > 0 && <span className="text-muted-foreground font-normal">({comments.length})</span>}
       </h4>
 
+      {session && familyId && !replyTo && (
+        <div className="mb-4">
+          <CommentForm
+            eventId={eventId}
+            familyId={familyId}
+            session={session}
+            parentId={null}
+            enableVideoUpload={enableVideoUpload}
+            placeholder="Add a comment…"
+            onPosted={handlePosted}
+            onCancel={null}
+          />
+        </div>
+      )}
+      {!session && (
+        <p className="mb-3 text-xs text-muted-foreground italic">Sign in to comment.</p>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-4">
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -482,23 +500,6 @@ function CommentThread({
         </div>
       )}
 
-      {session && familyId && !replyTo && (
-        <div className="mt-3">
-          <CommentForm
-            eventId={eventId}
-            familyId={familyId}
-            session={session}
-            parentId={null}
-            enableVideoUpload={enableVideoUpload}
-            placeholder="Add a comment…"
-            onPosted={handlePosted}
-            onCancel={null}
-          />
-        </div>
-      )}
-      {!session && (
-        <p className="mt-2 text-xs text-muted-foreground italic">Sign in to comment.</p>
-      )}
     </div>
   );
 }
