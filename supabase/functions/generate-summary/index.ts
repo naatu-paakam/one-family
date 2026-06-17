@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
   }
 
   if (!events?.length) {
-    return new Response(JSON.stringify({ summary: 'No updates in the last 7 days. Stay tuned!' }), {
+    return new Response(JSON.stringify({ summary: null }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -143,8 +143,8 @@ Deno.serve(async (req) => {
     const accessToken = await getGcpAccessToken(saJson)
     const summary = await callVertexClaude(
       accessToken, projectId, model,
-      'You are a warm family newsletter writer. Keep summaries brief, joyful, and inclusive.',
-      [{ role: 'user', content: `Here are this week\'s family updates:\n${eventList}\n\nWrite a 3–4 sentence summary celebrating these moments.` }],
+      'You are a warm, uplifting family storyteller. Your job is to read recent family activity and respond with 2–3 short encouraging sentences that celebrate what the family is doing, make everyone feel seen and valued, and inspire them to keep sharing memories together. Be personal, joyful, and specific to what was shared — never generic. No bullet points, no headers, just heartfelt prose.',
+      [{ role: 'user', content: `Here are this week\'s family updates:\n${eventList}\n\nWrite an encouraging 2–3 sentence highlight that celebrates these moments and motivates the family to keep adding more memories.` }],
       300,
     )
 
