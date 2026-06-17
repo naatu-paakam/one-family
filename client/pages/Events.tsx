@@ -774,7 +774,7 @@ function CommentForm({
           className="ml-auto flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
         >
           {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-          {generating ? "Generating…" : "✨ AI"}
+          {generating ? "Generating…" : "✨ Generate with AI"}
         </button>
         {onCancel && (
           <button
