@@ -375,15 +375,30 @@ function PostForm({
   onDelete?: () => Promise<void>;
 }) {
   const [title, setTitle] = useState(post?.title ?? "New Post");
-  const [content, setContent] = useState(post?.content ?? "");
+  // Multi-section content: existing posts split on double-newline, new posts start with one section
+  const [sections, setSections] = useState<string[]>(
+    post?.content ? post.content.split(/\n\n+/) : [""]
+  );
+  const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [tags, setTags] = useState((post?.hashtags ?? []).join(", "));
   const [selectedEventId, setSelectedEventId] = useState(post?.event_id ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(post?.image_url ?? "");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+
+  function updateSection(idx: number, val: string) {
+    setSections((prev) => prev.map((s, i) => i === idx ? val : s));
+  }
+
+  function addSectionAfter(idx: number) {
+    setSections((prev) => [...prev.slice(0, idx + 1), "", ...prev.slice(idx + 1)]);
+  }
+
+  function removeSection(idx: number) {
+    setSections((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev);
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -404,12 +419,11 @@ function PostForm({
     setImagePreview(URL.createObjectURL(file));
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(idx: number) {
     if (!title.trim()) { setError("Add a title first"); return; }
-    setGenerating(true);
+    setGeneratingIdx(idx);
     setError("");
     try {
-      // Only upload images for vision — skip videos (too large + not supported by vision API)
       let uploadedUrl: string | null = null;
       if (imageFile && !imageFile.type.startsWith("video/")) {
         uploadedUrl = await uploadImage(imageFile, familyId);
@@ -418,18 +432,18 @@ function PostForm({
       }
       const { description } = await callEdgeFunction("generate-description", {
         title,
-        content: content.trim() || null,
+        content: sections[idx].trim() || null,
         imageUrl: uploadedUrl,
         hashtags: parseTags(tags),
         eventId: selectedEventId || null,
         authorId,
         familyId,
       });
-      setContent(description);
+      updateSection(idx, description);
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setGenerating(false);
+      setGeneratingIdx(null);
     }
   }
 
@@ -445,9 +459,10 @@ function PostForm({
       } else if (imagePreview?.startsWith("http")) {
         imageUrl = imagePreview;
       }
+      const combined = sections.map((s) => s.trim()).filter(Boolean).join("\n\n") || null;
       await onSave({
         title: title.trim(),
-        content: content.trim() || null,
+        content: combined,
         image_url: imageUrl,
         hashtags: parseTags(tags),
         author_id: authorId,
@@ -531,29 +546,54 @@ function PostForm({
         />
       </label>
 
-      {/* Content with AI button */}
-      <label className="grid gap-1">
-        <span className="text-xs text-muted-foreground flex items-center justify-between">
-          Content
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-1 text-primary hover:text-primary/80 font-medium"
-          >
-            {generating
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <Sparkles className="h-3 w-3" />}
-            {generating ? "Generating…" : "✨ Generate with AI"}
-          </button>
-        </span>
-        <Textarea
-          rows={6}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Add a description or let AI generate one…"
-        />
-      </label>
+      {/* Multi-section content */}
+      <div className="grid gap-1">
+        <span className="text-xs text-muted-foreground">Content</span>
+        {sections.map((sec, idx) => (
+          <div key={idx} className="grid gap-1">
+            <span className="text-xs text-muted-foreground flex items-center justify-between">
+              {sections.length > 1 && (
+                <span className="text-muted-foreground/60">Section {idx + 1}</span>
+              )}
+              <span className="ml-auto flex items-center gap-2">
+                {sections.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSection(idx)}
+                    className="text-muted-foreground/50 hover:text-destructive text-xs"
+                  >
+                    Remove
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleGenerate(idx)}
+                  disabled={generatingIdx !== null}
+                  className="flex items-center gap-1 text-primary hover:text-primary/80 font-medium"
+                >
+                  {generatingIdx === idx
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Sparkles className="h-3 w-3" />}
+                  {generatingIdx === idx ? "Generating…" : "✨ Generate with AI"}
+                </button>
+              </span>
+            </span>
+            <Textarea
+              rows={5}
+              value={sec}
+              onChange={(e) => updateSection(idx, e.target.value)}
+              placeholder="Add a description or let AI generate one…"
+            />
+            <button
+              type="button"
+              onClick={() => addSectionAfter(idx)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary mx-auto mt-1"
+            >
+              <Plus className="h-3 w-3" /> Add section
+            </button>
+          </div>
+        ))}
+      </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
