@@ -400,8 +400,12 @@ function PostForm({
       }
       const { description } = await callEdgeFunction("generate-description", {
         title,
+        content: content.trim() || null,
         imageUrl: uploadedUrl,
         hashtags: parseTags(tags),
+        eventId: selectedEventId || null,
+        authorId,
+        familyId,
       });
       setContent(description);
     } catch (e: any) {

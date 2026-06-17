@@ -4,6 +4,8 @@
  * Secret: supabase secrets set GCP_SERVICE_ACCOUNT_JSON='<json>'
  */
 
+import { createClient } from 'npm:@supabase/supabase-js'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -26,7 +28,6 @@ async function getGcpAccessToken(serviceAccountJson: string): Promise<string> {
 
   const signingInput = `${encode(header)}.${encode(payload)}`
 
-  // Import the private key
   const pemBody = sa.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, '')
     .replace(/-----END PRIVATE KEY-----/, '')
@@ -102,28 +103,98 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { title = '', imageUrl, hashtags = [], recentEvents = [] } = await req.json()
+  const body = await req.json().catch(() => ({}))
+  const {
+    title = '',
+    content = null,       // user's draft text to enrich
+    imageUrl = null,
+    hashtags = [],
+    eventId = null,       // linked event — fetch its posts for context
+    authorId = null,      // author — fetch their recent posts for voice context
+    familyId = null,
+  } = body
 
-  const contextBlock = recentEvents.length
-    ? `Recent family updates (last 7 days):\n${recentEvents.map((e: any) => `• ${e.title}`).join('\n')}\n\n`
-    : ''
+  // ── Fetch context from DB ──────────────────────────────────────────────────
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
 
-  const userPrompt = `${contextBlock}Write a warm, personal 2–3 sentence description for a family update.\nTitle: "${title}"\nHashtags: ${hashtags.map((t: string) => '#' + t).join(' ') || 'none'}`
+  type Post = { title: string; content: string | null }
+  let eventPosts: Post[] = []
+  let authorPosts: Post[] = []
 
+  // Posts on the same event (most relevant context)
+  if (eventId) {
+    const { data } = await supabase
+      .from('updates')
+      .select('title, content')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: false })
+      .limit(5)
+    eventPosts = data ?? []
+  }
+
+  // Author's recent posts in this family (for voice/style context)
+  if (authorId) {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+    let q = supabase
+      .from('updates')
+      .select('title, content')
+      .eq('author_id', authorId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(3)
+    if (familyId) q = q.eq('family_id', familyId)
+    const { data } = await q
+    authorPosts = data ?? []
+  }
+
+  // ── Build prompt ───────────────────────────────────────────────────────────
+  const parts: string[] = []
+
+  if (eventPosts.length > 0) {
+    parts.push(
+      `Other posts for this event:\n` +
+      eventPosts.map(p => `• ${p.title}${p.content ? ': ' + p.content.slice(0, 120) : ''}`).join('\n')
+    )
+  }
+
+  if (authorPosts.length > 0) {
+    parts.push(
+      `Recent posts by this author (for tone/voice reference):\n` +
+      authorPosts.map(p => `• ${p.title}${p.content ? ': ' + p.content.slice(0, 100) : ''}`).join('\n')
+    )
+  }
+
+  const contextBlock = parts.length > 0 ? parts.join('\n\n') + '\n\n' : ''
+
+  const draftBlock = content
+    ? `The author has started writing:\n"${content}"\n\nEnrich and expand this into a warm, personal 2–3 sentence story — preserve their voice, add vivid detail, and make it feel complete.`
+    : `Write a warm, personal 2–3 sentence family story for this post.`
+
+  const userPrompt =
+    `${contextBlock}Title: "${title}"\nHashtags: ${hashtags.map((t: string) => '#' + t).join(' ') || 'none'}\n\n${draftBlock}`
+
+  // ── Call Claude ────────────────────────────────────────────────────────────
   const projectId = JSON.parse(saJson).project_id
   const model = Deno.env.get('CLAUDE_MODEL') ?? 'claude-sonnet-4-6'
 
   let messageContent: any = [{ type: 'text', text: userPrompt }]
 
-  if (imageUrl) {
-    const imgResp = await fetch(imageUrl)
-    const imgBuffer = await imgResp.arrayBuffer()
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)))
-    const mimeType = (imgResp.headers.get('content-type') ?? 'image/jpeg').split(';')[0]
-    messageContent = [
-      { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-      { type: 'text', text: userPrompt },
-    ]
+  if (imageUrl && !imageUrl.match(/\.(mp4|mov|webm|ogg)(\?|$)/i)) {
+    try {
+      const imgResp = await fetch(imageUrl)
+      const imgBuffer = await imgResp.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)))
+      const mimeType = (imgResp.headers.get('content-type') ?? 'image/jpeg').split(';')[0]
+      messageContent = [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+        { type: 'text', text: userPrompt },
+      ]
+    } catch {
+      // image fetch failed — proceed text-only
+    }
   }
 
   try {
