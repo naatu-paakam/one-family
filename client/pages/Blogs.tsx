@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -376,6 +376,7 @@ function PostForm({
   const [selectedEventId, setSelectedEventId] = useState(post?.event_id ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(post?.image_url ?? "");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -392,8 +393,9 @@ function PostForm({
     setGenerating(true);
     setError("");
     try {
+      // Only upload images for vision — skip videos (too large + not supported by vision API)
       let uploadedUrl: string | null = null;
-      if (imageFile) {
+      if (imageFile && !imageFile.type.startsWith("video/")) {
         uploadedUrl = await uploadImage(imageFile, familyId);
         setImagePreview(uploadedUrl);
         setImageFile(null);
@@ -463,11 +465,11 @@ function PostForm({
       )}
 
       {/* Photo / Video */}
-      <label className="grid gap-1">
+      <div className="grid gap-1">
         <span className="text-xs text-muted-foreground">Photo or Video (optional)</span>
         <div
           className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition"
-          onClick={() => document.getElementById("blog-img-input")?.click()}
+          onClick={() => fileInputRef.current?.click()}
         >
           {imagePreview ? (
             imageFile?.type.startsWith("video/") || isVideoUrl(imagePreview) ? (
@@ -480,13 +482,13 @@ function PostForm({
           )}
         </div>
         <input
-          id="blog-img-input"
+          ref={fileInputRef}
           type="file"
           accept="image/*,video/*"
           className="hidden"
           onChange={handleFile}
         />
-      </label>
+      </div>
 
       {/* Title */}
       <label className="grid gap-1">
