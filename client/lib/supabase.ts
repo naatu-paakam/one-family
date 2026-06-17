@@ -274,7 +274,7 @@ export async function fetchMyFamilies() {
   if (!user) return []
   const { data, error } = await supabase
     .from('family_members')
-    .select('role, families(id, name, invite_code, created_by, created_at)')
+    .select('role, families(id, name, invite_code, created_by, created_at, enable_video_upload)')
     .eq('user_id', user.id)
     .order('joined_at', { ascending: true })
   if (error) throw error

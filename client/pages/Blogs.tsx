@@ -78,7 +78,7 @@ function tabOf(p: Update): "published" | "draft" {
 export default function Blogs() {
   const { session, isAdmin, openAuthModal } = useAuth();
   const { activeEvents } = useEvent();
-  const { activeFamilyId } = useFamily();
+  const { activeFamilyId, enableVideoUpload } = useFamily();
 
   const [posts, setPosts] = useState<Update[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,6 +214,7 @@ export default function Blogs() {
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
                 familyId={activeFamilyId}
+                enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
                   const created = await createUpdate(payload);
@@ -231,6 +232,7 @@ export default function Blogs() {
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
                 familyId={activeFamilyId}
+                enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
                   const updated = await updateUpdate(selected.id, payload);
@@ -358,6 +360,7 @@ function PostForm({
   activeEvents,
   authorId,
   familyId,
+  enableVideoUpload,
   onCancel,
   onSave,
   onDelete,
@@ -366,6 +369,7 @@ function PostForm({
   activeEvents: { id: string; title: string }[];
   authorId: string;
   familyId: string | null;
+  enableVideoUpload: boolean;
   onCancel: () => void;
   onSave: (p: FormPayload) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -384,6 +388,11 @@ function PostForm({
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.startsWith("video/") && !enableVideoUpload) {
+      setError("Video uploads require a subscription plan.");
+      e.target.value = "";
+      return;
+    }
     const maxMB = file.type.startsWith("video/") ? 40 : 10;
     if (file.size > maxMB * 1024 * 1024) {
       setError(`File too large — max ${maxMB}MB for ${file.type.startsWith("video/") ? "videos" : "images"}. Try compressing it first.`);
@@ -482,12 +491,12 @@ function PostForm({
               <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
             )
           ) : (
-            <span className="text-xs text-muted-foreground">Click to upload a photo or video</span>
+            <span className="text-xs text-muted-foreground">{enableVideoUpload ? "Click to upload a photo or video" : "Click to upload a photo"}</span>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept={enableVideoUpload ? "image/*,video/*" : "image/*"}
             className="sr-only"
             onChange={handleFile}
           />

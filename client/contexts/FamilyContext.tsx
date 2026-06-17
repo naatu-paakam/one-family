@@ -9,6 +9,7 @@ export interface Family {
   created_by: string | null
   created_at: string
   role: 'admin' | 'member'
+  enable_video_upload?: boolean
 }
 
 interface FamilyContextValue {
@@ -18,6 +19,7 @@ interface FamilyContextValue {
   setActiveFamilyId: (id: string) => void
   reload: () => Promise<void>
   loading: boolean
+  enableVideoUpload: boolean
 }
 
 const FamilyContext = createContext<FamilyContextValue | null>(null)
@@ -54,9 +56,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   }
 
   const activeFamily = families.find(f => f.id === activeFamilyId) ?? null
+  const enableVideoUpload = activeFamily?.enable_video_upload ?? false
 
   return (
-    <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, setActiveFamilyId, reload: load, loading }}>
+    <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, setActiveFamilyId, reload: load, loading, enableVideoUpload }}>
       {children}
     </FamilyContext.Provider>
   )

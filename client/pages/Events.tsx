@@ -116,7 +116,7 @@ type Mode = "none" | "create" | "edit";
 export default function Events() {
   const { session, openAuthModal } = useAuth();
   const { activeEvents, startEvent, endEvent } = useEvent();
-  const { activeFamilyId } = useFamily();
+  const { activeFamilyId, enableVideoUpload } = useFamily();
 
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
@@ -346,6 +346,7 @@ export default function Events() {
               canModify={!!session}
               session={session}
               familyId={activeFamilyId}
+              enableVideoUpload={enableVideoUpload}
               onClose={() => {
                 if (confirm(`Close event "${selected.title}"?`)) endEvent(selected.id);
               }}
@@ -353,6 +354,9 @@ export default function Events() {
               onAddInvite={(name, email) => handleAddInvite(selected.id, name, email)}
               onUpdateStatus={(invId, status) =>
                 handleUpdateInviteStatus(invId, selected.id, status)
+              }
+              onCommentCountChange={(eventId, delta) =>
+                setCommentCounts((prev) => ({ ...prev, [eventId]: Math.max(0, (prev[eventId] ?? 0) + delta) }))
               }
             />
           ) : (
@@ -374,10 +378,14 @@ function CommentThread({
   eventId,
   familyId,
   session,
+  enableVideoUpload,
+  onCommentCountChange,
 }: {
   eventId: string;
   familyId: string | null;
   session: any;
+  enableVideoUpload: boolean;
+  onCommentCountChange?: (delta: number) => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -393,10 +401,12 @@ function CommentThread({
   function handlePosted(comment: Comment) {
     setComments((prev) => [...prev, comment]);
     setReplyTo(null);
+    onCommentCountChange?.(1);
   }
 
   function handleDeleted(id: string) {
     setComments((prev) => prev.filter((c) => c.id !== id));
+    onCommentCountChange?.(-1);
   }
 
   function handleReacted(commentId: string, emoji: string, added: boolean) {
@@ -460,6 +470,7 @@ function CommentThread({
                     familyId={familyId}
                     session={session}
                     parentId={c.id}
+                    enableVideoUpload={enableVideoUpload}
                     placeholder={`Reply to ${c.profiles?.full_name ?? "comment"}…`}
                     onPosted={handlePosted}
                     onCancel={() => setReplyTo(null)}
@@ -478,6 +489,7 @@ function CommentThread({
             familyId={familyId}
             session={session}
             parentId={null}
+            enableVideoUpload={enableVideoUpload}
             placeholder="Add a comment…"
             onPosted={handlePosted}
             onCancel={null}
@@ -612,6 +624,7 @@ function CommentForm({
   familyId,
   session,
   parentId,
+  enableVideoUpload,
   placeholder,
   onPosted,
   onCancel,
@@ -620,6 +633,7 @@ function CommentForm({
   familyId: string;
   session: any;
   parentId: string | null;
+  enableVideoUpload: boolean;
   placeholder: string;
   onPosted: (c: Comment) => void;
   onCancel: (() => void) | null;
@@ -634,6 +648,11 @@ function CommentForm({
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.startsWith("video/") && !enableVideoUpload) {
+      setError("Video uploads require a subscription plan.");
+      e.target.value = "";
+      return;
+    }
     const maxMB = file.type.startsWith("video/") ? 40 : 10;
     if (file.size > maxMB * 1024 * 1024) {
       setError(`File too large — max ${maxMB}MB for ${file.type.startsWith("video/") ? "videos" : "images"}.`);
@@ -713,9 +732,9 @@ function CommentForm({
             <img src={imagePreview} alt="" className="max-h-24 mx-auto rounded object-contain" />
           )
         ) : (
-          <span className="text-xs text-muted-foreground">📎 Attach photo or video (optional)</span>
+          <span className="text-xs text-muted-foreground">{enableVideoUpload ? "📎 Attach photo or video (optional)" : "📎 Attach photo (optional)"}</span>
         )}
-        <input type="file" accept="image/*,video/*" className="sr-only" onChange={handleFile} />
+        <input type="file" accept={enableVideoUpload ? "image/*,video/*" : "image/*"} className="sr-only" onChange={handleFile} />
       </label>
       {imagePreview && (
         <button
@@ -843,10 +862,12 @@ function EventDetail({
   canModify,
   session,
   familyId,
+  enableVideoUpload,
   onClose,
   onModify,
   onAddInvite,
   onUpdateStatus,
+  onCommentCountChange,
 }: {
   event: FamilyEvent;
   invites: Invite[];
@@ -854,10 +875,12 @@ function EventDetail({
   canModify: boolean;
   session: any;
   familyId: string | null;
+  enableVideoUpload: boolean;
   onClose: () => void;
   onModify: () => void;
   onAddInvite: (name: string, email: string | null) => Promise<void>;
   onUpdateStatus: (invId: string, status: string) => Promise<void>;
+  onCommentCountChange?: (eventId: string, delta: number) => void;
 }) {
   const [name, setName]   = useState("");
   const [email, setEmail] = useState("");
@@ -982,6 +1005,8 @@ function EventDetail({
           eventId={event.id}
           familyId={familyId}
           session={session}
+          enableVideoUpload={enableVideoUpload}
+          onCommentCountChange={onCommentCountChange ? (delta) => onCommentCountChange(event.id, delta) : undefined}
         />
       </div>
     </div>

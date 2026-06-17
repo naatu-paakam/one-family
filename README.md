@@ -15,11 +15,13 @@ A private family app for sharing stories, planning events, and building an inter
 
 ## Features
 
-- **Stories** — write, tag, and publish family posts; attach to events; AI-generated descriptions
-- **Events** — create upcoming/ongoing/past gatherings with location; manage RSVP invites per event
+- **Multi-family** — one user can belong to multiple families; active family drives all data shown; switch instantly from the header
+- **Stories** — write, tag, and publish family posts; attach photos or videos; AI-generated descriptions; scoped to active family
+- **Events** — create upcoming/ongoing/past gatherings with location; manage RSVP invites; comment threads with emoji reactions and nested replies; media attachments on comments
 - **Family Tree** — interactive expandable tree, persisted per-family in Supabase (`family_trees` table)
-- **AI Summaries** — Claude generates event descriptions and blog content via Edge Functions
+- **AI Summaries** — Claude generates event descriptions, blog content, and weekly family activity snapshots via Edge Functions
 - **Auth** — email/password + Google OAuth via Supabase Auth
+- **Video uploads** — gated per family via `enable_video_upload` flag (default `false`); activated by subscription plan
 
 ## Repo Layout
 
@@ -29,7 +31,7 @@ client/                    # React SPA (Vite)
   components/
     layout/                # SiteHeader, SiteFooter
     ui/                    # shadcn-style Radix components
-  contexts/                # AuthContext, EventContext
+  contexts/                # AuthContext, EventContext, FamilyContext
   lib/
     supabase.ts            # All Supabase queries + Edge Function calls
 supabase/
@@ -83,12 +85,17 @@ npm run build
 | Table | Purpose |
 |---|---|
 | `profiles` | One row per auth user (full_name, avatar_url) |
-| `updates` | Family stories/posts (title, content, hashtags, event link) |
-| `events` | Gatherings (title, description, location, started_at, closed_at) |
+| `families` | Family groups (name, invite_code, enable_video_upload flag) |
+| `family_members` | Join table — user ↔ family with role (admin/member) |
+| `family_trees` | Per-family tree data (JSON blob, upserted) |
+| `updates` | Family stories/posts (title, content, hashtags, event link, family_id) |
+| `events` | Gatherings (title, description, location, started_at, closed_at, family_id) |
 | `invites` | Per-event RSVPs (full_name, email, status, invited_by) |
+| `comments` | Comments on events (content, image_url, parent_id for replies, family_id) |
+| `comment_reactions` | Per-user emoji reactions on comments |
 | `summaries` | AI-generated weekly summaries |
 
-Row-Level Security is enabled on all tables. Policies allow public read; writes require `auth.uid() is not null`.
+Row-Level Security is enabled on all tables. Family-scoped tables are readable only by family members (`family_id in (select family_id from family_members where user_id = auth.uid())`).
 
 ### Applying migrations
 
@@ -108,8 +115,8 @@ Edge Functions run server-side on Supabase — the Claude API key never touches 
 
 | Function | Trigger | What it does |
 |---|---|---|
-| `generate-description` | Button click in UI | Generates a warm prose description for an event or blog post title |
-| `generate-summary` | Scheduled / manual | Summarises recent family activity into a weekly snapshot |
+| `generate-description` | Button click in UI | Generates a warm prose description for an event or blog post title, enriched with context from recent family posts |
+| `generate-summary` | Button click on Home | Summarises recent family activity into a weekly snapshot scoped to the active family |
 
 ### Secrets (set once in Supabase dashboard)
 
