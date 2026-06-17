@@ -164,7 +164,7 @@ export async function callEdgeFunction(name, body) {
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
-export async function uploadImage(file, familyId?: string | null) {
+export async function uploadImage(file: File, familyId?: string | null) {
   const ext = file.name.split('.').pop()
   const basename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
   const path = familyId ? `${familyId}/${basename}` : `shared/${basename}`

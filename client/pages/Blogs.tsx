@@ -17,6 +17,19 @@ import {
   callEdgeFunction,
 } from "@/lib/supabase";
 import { format } from "date-fns";
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|ogg)(\?|$)/i.test(url);
+}
+
+function MediaPreview({ url, className }: { url: string; className: string }) {
+  return isVideoUrl(url) ? (
+    <video src={url} controls className={className} />
+  ) : (
+    <img src={url} alt="" className={className} />
+  );
+}
+
 import {
   Select,
   SelectContent,
@@ -254,11 +267,7 @@ export default function Blogs() {
                 ))}
               </div>
               {selected.image_url && (
-                <img
-                  src={selected.image_url}
-                  alt=""
-                  className="mt-3 w-full rounded-lg object-cover max-h-40"
-                />
+                <MediaPreview url={selected.image_url} className="mt-3 w-full rounded-lg object-cover max-h-40" />
               )}
               <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">
                 {selected.content}
@@ -301,11 +310,7 @@ function PostCard({
       className={`text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md ${active ? "ring-2 ring-primary/30" : ""}`}
     >
       {post.image_url && (
-        <img
-          src={post.image_url}
-          alt=""
-          className="w-full h-28 object-cover rounded-lg mb-3"
-        />
+        <MediaPreview url={post.image_url} className="w-full h-28 object-cover rounded-lg mb-3" />
       )}
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -453,23 +458,27 @@ function PostForm({
         </label>
       )}
 
-      {/* Image */}
+      {/* Photo / Video */}
       <label className="grid gap-1">
-        <span className="text-xs text-muted-foreground">Image (optional)</span>
+        <span className="text-xs text-muted-foreground">Photo or Video (optional)</span>
         <div
           className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition"
           onClick={() => document.getElementById("blog-img-input")?.click()}
         >
           {imagePreview ? (
-            <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
+            imageFile?.type.startsWith("video/") || isVideoUrl(imagePreview) ? (
+              <video src={imagePreview} controls className="max-h-28 mx-auto rounded-md" />
+            ) : (
+              <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
+            )
           ) : (
-            <span className="text-xs text-muted-foreground">Click to upload a photo</span>
+            <span className="text-xs text-muted-foreground">Click to upload a photo or video</span>
           )}
         </div>
         <input
           id="blog-img-input"
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           className="hidden"
           onChange={handleFile}
         />
