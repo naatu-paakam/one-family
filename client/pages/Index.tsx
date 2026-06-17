@@ -138,29 +138,8 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Feature cards */}
-      <section className="container py-12 md:py-16">
-        <div className="grid gap-6 md:grid-cols-3">
-          <FeatureCard
-            title="Member Blogs"
-            desc="Any family member can write, tag, and share posts. Keep memories in one place."
-            link="/blogs"
-          />
-          <FeatureCard
-            title="Events & Groups"
-            desc="Plan events, invite members, and create event groups to chat and share media."
-            link="/events"
-          />
-          <FeatureCard
-            title="AI Summaries"
-            desc="Automatic highlights from posts and events. See what's new at a glance."
-            link="#ai"
-          />
-        </div>
-      </section>
-
       {/* AI Summary + Upcoming Events */}
-      <section id="ai" className="container pb-16">
+      <section id="ai" className="container py-12 md:py-16">
         <div className="grid gap-8 md:grid-cols-2">
           <div>
             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
@@ -206,6 +185,27 @@ export default function Index() {
               <Link to="/events">Open Events</Link>
             </Button>
           </div>
+        </div>
+      </section>
+
+      {/* Feature cards */}
+      <section className="container pb-16">
+        <div className="grid gap-6 md:grid-cols-3">
+          <FeatureCard
+            title="Member Blogs"
+            desc="Any family member can write, tag, and share posts. Keep memories in one place."
+            link="/blogs"
+          />
+          <FeatureCard
+            title="Events & Groups"
+            desc="Plan events, invite members, and create event groups to chat and share media."
+            link="/events"
+          />
+          <FeatureCard
+            title="AI Summaries"
+            desc="Automatic highlights from posts and events. See what's new at a glance."
+            link="#ai"
+          />
         </div>
       </section>
     </div>
