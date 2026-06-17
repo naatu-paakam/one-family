@@ -17,6 +17,7 @@ import {
   updateInviteStatus,
   updateEvent,
   fetchComments,
+  fetchCommentCounts,
   createComment,
   deleteComment,
   toggleReaction,
@@ -120,6 +121,7 @@ export default function Events() {
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
   const [invitesByEvent, setInvitesByEvent] = useState<Record<string, Invite[]>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("ongoing");
@@ -166,16 +168,20 @@ export default function Events() {
         }
         setEventPosts(map);
 
-        // Load invites for all events
+        // Load invites and comment counts for all events
         const ids = evList.map((e) => e.id);
         if (ids.length > 0) {
-          const allInvites = await fetchAllInvites(ids);
+          const [allInvites, counts] = await Promise.all([
+            fetchAllInvites(ids),
+            fetchCommentCounts(ids),
+          ]);
           const invMap: Record<string, Invite[]> = {};
           for (const inv of allInvites as Invite[]) {
             if (!invMap[inv.event_id]) invMap[inv.event_id] = [];
             invMap[inv.event_id].push(inv);
           }
           setInvitesByEvent(invMap);
+          setCommentCounts(counts);
         }
       } finally {
         setLoading(false);
@@ -285,6 +291,7 @@ export default function Events() {
                           key={ev.id}
                           ev={ev}
                           invites={invitesByEvent[ev.id] ?? []}
+                          commentCount={commentCounts[ev.id] ?? 0}
                           active={selected?.id === ev.id}
                           onSelect={() => {
                             setSelectedId(ev.id);
@@ -768,11 +775,13 @@ function CommentForm({
 function EventCard({
   ev,
   invites,
+  commentCount,
   active,
   onSelect,
 }: {
   ev: FamilyEvent;
   invites: Invite[];
+  commentCount: number;
   active?: boolean;
   onSelect: () => void;
 }) {
@@ -810,6 +819,11 @@ function EventCard({
         )}
         {going === 0 && pending === 0 && invited === 0 && (
           <Badge variant="outline" className="text-muted-foreground">No invites yet</Badge>
+        )}
+        {commentCount > 0 && (
+          <Badge variant="outline" className="text-muted-foreground ml-auto">
+            💬 {commentCount}
+          </Badge>
         )}
       </div>
 

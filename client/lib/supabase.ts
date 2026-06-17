@@ -328,6 +328,20 @@ export async function fetchFamilyMemberCount(familyId: string) {
 
 // ── Comments ──────────────────────────────────────────────────────────────────
 
+export async function fetchCommentCounts(eventIds: string[]): Promise<Record<string, number>> {
+  if (isDemo || eventIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('comments')
+    .select('event_id')
+    .in('event_id', eventIds)
+  if (error) throw error
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    counts[row.event_id] = (counts[row.event_id] ?? 0) + 1
+  }
+  return counts
+}
+
 const COMMENT_SELECT = '*, profiles!comments_author_id_fkey(full_name, avatar_url), comment_reactions(comment_id, user_id, emoji)'
 
 export async function fetchComments(eventId: string) {
