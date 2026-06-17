@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import {
   fetchUpdates,
   callEdgeFunction,
@@ -82,6 +83,7 @@ type Mode = "none" | "create" | "edit";
 export default function Events() {
   const { session, openAuthModal } = useAuth();
   const { activeEvents, startEvent, endEvent } = useEvent();
+  const { activeFamilyId } = useFamily();
 
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
@@ -105,7 +107,7 @@ export default function Events() {
     async function load() {
       setLoading(true);
       try {
-        const posts = await fetchUpdates({ limit: 200 });
+        const posts = await fetchUpdates({ limit: 200, familyId: activeFamilyId });
         const evMap: Record<string, FamilyEvent> = {};
         for (const p of posts ?? []) {
           if (p.events && !evMap[p.events.id]) {
@@ -148,7 +150,7 @@ export default function Events() {
       }
     }
     load();
-  }, [activeEvents]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeEvents, activeFamilyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
