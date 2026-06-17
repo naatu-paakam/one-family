@@ -1,80 +1,92 @@
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
 
-function summarize(text: string) {
-  const clean = text.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
-  const sentences = clean.split(/(?<=[.!?])\s+/).slice(0, 4);
-  const words = clean.toLowerCase().match(/[a-zA-Z']+/g) || [];
+type Post = {
+  title: string;
+  content: string | null;
+  profiles: { full_name: string | null } | null;
+};
+
+function summarize(posts: Post[], eventCount: number) {
+  if (posts.length === 0 && eventCount === 0) return null;
+
+  const sentences: string[] = [];
+
+  if (eventCount > 0)
+    sentences.push(
+      `There ${eventCount === 1 ? "is" : "are"} ${eventCount} active event${eventCount > 1 ? "s" : ""} happening right now.`,
+    );
+
+  const authors = [
+    ...new Set(posts.map((p) => p.profiles?.full_name).filter(Boolean)),
+  ] as string[];
+  if (authors.length > 0)
+    sentences.push(
+      `Recent posts from ${authors.slice(0, 3).join(", ")}${authors.length > 3 ? " and others" : ""}.`,
+    );
+
+  const allText = posts
+    .map((p) => [p.title, p.content].filter(Boolean).join(" "))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   const stop = new Set([
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "but",
-    "to",
-    "of",
-    "in",
-    "on",
-    "for",
-    "with",
-    "at",
-    "by",
-    "from",
-    "is",
-    "it",
-    "that",
-    "we",
-    "our",
+    "the","a","an","and","or","but","to","of","in","on","for","with",
+    "at","by","from","is","it","that","we","our","are","was","has","have",
+    "this","their","they","been","be","as","an","so","no","if","its",
   ]);
+  const words = allText.toLowerCase().match(/[a-z']{3,}/g) || [];
   const freq = new Map<string, number>();
   for (const w of words)
-    if (!stop.has(w) && w.length > 2) freq.set(w, (freq.get(w) || 0) + 1);
-  const top = [...freq.entries()]
+    if (!stop.has(w)) freq.set(w, (freq.get(w) || 0) + 1);
+  const keywords = [...freq.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
+    .slice(0, 6)
     .map(([w]) => w);
-  const summary = sentences.join(" ");
-  return { summary, keywords: top };
+
+  return { sentences, keywords };
 }
 
-export default function AISummary() {
-  const [text, setText] = useState(
-    "Grandma's 80th birthday was filled with stories, photos, and a surprise video call. We shared homemade recipes and planned a reunion picnic next month.",
-  );
-  const { summary, keywords } = useMemo(() => summarize(text), [text]);
+export default function AISummary({
+  posts = [],
+  eventCount = 0,
+}: {
+  posts?: Post[];
+  eventCount?: number;
+}) {
+  const result = useMemo(() => summarize(posts, eventCount), [posts, eventCount]);
 
   return (
     <div className="rounded-xl border bg-card p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">AI Summary (demo)</h3>
-        <Button size="sm" onClick={() => setText(text + " ")}>
-          Refresh
-        </Button>
-      </div>
-      <textarea
-        className="mt-3 w-full resize-none rounded-md border bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <div className="mt-4 text-sm">
-        <div className="text-muted-foreground">Summary</div>
-        <p className="mt-1">{summary}</p>
-      </div>
-      <div className="mt-3 text-sm">
-        <div className="text-muted-foreground">Keywords</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {keywords.map((k) => (
-            <span
-              key={k}
-              className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
-            >
-              {k}
-            </span>
-          ))}
-        </div>
-      </div>
+      <h3 className="font-semibold">Family Activity Summary</h3>
+      {result ? (
+        <>
+          <div className="mt-3 text-sm space-y-1">
+            {result.sentences.map((s, i) => (
+              <p key={i} className="text-foreground leading-snug">{s}</p>
+            ))}
+          </div>
+          {result.keywords.length > 0 && (
+            <div className="mt-4 text-sm">
+              <div className="text-muted-foreground mb-2">Top topics</div>
+              <div className="flex flex-wrap gap-2">
+                {result.keywords.map((k) => (
+                  <span
+                    key={k}
+                    className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground capitalize"
+                  >
+                    {k}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground leading-snug">
+          No activity yet — once your family adds stories or starts events, highlights will appear here automatically.
+        </p>
+      )}
     </div>
   );
 }

@@ -163,11 +163,10 @@ export default function Index() {
               Summary of family activity
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Paste recent posts or updates to preview how the AI summarizes
-              highlights. Server-side integration can be added later.
+              Auto-generated from your family's recent stories and events.
             </p>
             <div className="mt-6">
-              <AISummary />
+              <AISummary posts={recentPosts} eventCount={activeEvents.length} />
             </div>
           </div>
           <div className="rounded-2xl border bg-card p-6">
