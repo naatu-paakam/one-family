@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2, Sparkles, Link2, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import {
   fetchUpdates,
   createUpdate,
@@ -16,6 +17,19 @@ import {
   callEdgeFunction,
 } from "@/lib/supabase";
 import { format } from "date-fns";
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|ogg)(\?|$)/i.test(url);
+}
+
+function MediaPreview({ url, className }: { url: string; className: string }) {
+  return isVideoUrl(url) ? (
+    <video src={url} controls className={className} />
+  ) : (
+    <img src={url} alt="" className={className} />
+  );
+}
+
 import {
   Select,
   SelectContent,
@@ -35,6 +49,7 @@ type Update = {
   event_id: string | null;
   created_at: string;
   updated_at: string;
+  visibility: "private" | "family" | "open" | "public";
   profiles: { full_name: string | null; avatar_url: string | null } | null;
   events: { id: string; title: string; closed_at: string | null } | null;
 };
@@ -55,15 +70,52 @@ function parseTags(raw: string) {
     .filter(Boolean);
 }
 
-// Map Supabase posts to the tab categories:
-// "published" = posts with content, "draft" = posts without content
+// Map visibility to tab: private = draft, anything else = published (ADR-010)
 function tabOf(p: Update): "published" | "draft" {
-  return p.content?.trim() ? "published" : "draft";
+  return p.visibility === "private" ? "draft" : "published";
+}
+
+const VISIBILITY_LABELS: Record<string, { label: string; short: string; icon: string; description: string }> = {
+  private: { label: "Private",  short: "Private to you", icon: "🔒", description: "Only you can see this — saved as draft" },
+  family:  { label: "Family",   short: "to Family",      icon: "❤️", description: "Visible to family members only" },
+  open:    { label: "Open",     short: "All users",      icon: "👥", description: "Any registered user can read" },
+  public:  { label: "Public",   short: "Public",         icon: "🌐", description: "Anyone can read — no sign-in required" },
+};
+
+function CopyLinkButton({ storyId, dim, tooltip }: { storyId: string; dim?: boolean; tooltip?: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/stories/${storyId}`;
+  tooltip = tooltip ?? "Copy shareable link";
+
+  function handleCopy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={tooltip}
+      className={`shrink-0 rounded-full p-1.5 transition-colors ${
+        copied
+          ? "text-emerald-500 bg-emerald-50"
+          : dim
+          ? "text-muted-foreground/40 hover:text-muted-foreground hover:bg-slate-100"
+          : "text-muted-foreground hover:text-foreground hover:bg-slate-100"
+      }`}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+    </button>
+  );
 }
 
 export default function Blogs() {
-  const { session, isAdmin, openAuthModal } = useAuth();
+  const { session, openAuthModal } = useAuth();
+  const { isFamilyAdmin } = useFamily();
   const { activeEvents } = useEvent();
+  const { activeFamilyId, enableVideoUpload } = useFamily();
 
   const [posts, setPosts] = useState<Update[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +127,7 @@ export default function Blogs() {
   async function loadPosts() {
     setLoading(true);
     try {
-      const data = await fetchUpdates({ limit: 100 });
+      const data = await fetchUpdates({ limit: 100, familyId: activeFamilyId });
       setPosts(data ?? []);
       if (!selectedId && data?.length) setSelectedId(data[0].id);
     } finally {
@@ -83,7 +135,7 @@ export default function Blogs() {
     }
   }
 
-  useEffect(() => { loadPosts(); }, []); // eslint-disable-line
+  useEffect(() => { loadPosts(); }, [activeFamilyId]); // eslint-disable-line
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -108,7 +160,7 @@ export default function Blogs() {
   );
 
   const canEdit =
-    selected && (isAdmin || selected.author_id === session?.user?.id);
+    selected && (isFamilyAdmin || selected.author_id === session?.user?.id);
 
   const startCreate = () => setMode("create");
   const startEdit = () => setMode("edit");
@@ -122,7 +174,7 @@ export default function Blogs() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Family Blogs
+                Family Stories
               </h1>
               <p className="mt-1 text-muted-foreground">
                 Write and share stories together. Create new posts, edit drafts,
@@ -147,7 +199,7 @@ export default function Blogs() {
                 </TabsList>
                 <div className="flex md:justify-end">
                   <Button
-                    onClick={session ? startCreate : openAuthModal}
+                    onClick={session ? startCreate : () => openAuthModal()}
                     className="h-10 w-10 rounded-full p-0"
                     aria-label="New Post"
                     title="New Post"
@@ -198,9 +250,12 @@ export default function Blogs() {
               <PostForm
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
+                familyId={activeFamilyId}
+                enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
-                  const created = await createUpdate(payload);
+                  const { familyId: fid, ...rest } = payload;
+                  const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
                   setPosts((prev) => [created, ...prev]);
                   setSelectedId(created.id);
                   setMode("none");
@@ -214,9 +269,13 @@ export default function Blogs() {
                 post={selected}
                 activeEvents={activeEvents}
                 authorId={session!.user.id}
+                familyId={activeFamilyId}
+                enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
-                  const updated = await updateUpdate(selected.id, payload);
+                  // Strip familyId — family association managed via story_families junction (ADR-009)
+                  const { familyId: _fid, ...rest } = payload;
+                  const updated = await updateUpdate(selected.id, rest);
                   setPosts((prev) =>
                     prev.map((p) => (p.id === selected.id ? { ...p, ...updated } : p)),
                   );
@@ -232,12 +291,30 @@ export default function Blogs() {
             </div>
           ) : selected ? (
             <div>
-              <div className="text-sm text-muted-foreground">Selected post</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm text-muted-foreground">Selected post</div>
+                {/* Copy link — all except private (private = author only, no sharing) */}
+                {selected.visibility !== "private" && (
+                  <CopyLinkButton
+                    storyId={selected.id}
+                    dim={selected.visibility === "family"}
+                    tooltip={
+                      selected.visibility === "family"
+                        ? "Copy link (family members need to sign in to view)"
+                        : selected.visibility === "open"
+                        ? "Copy link (registered users can view)"
+                        : "Copy public link"
+                    }
+                  />
+                )}
+              </div>
               <div className="mt-1 text-lg font-semibold">{selected.title}</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 By {selected.profiles?.full_name ?? "Family Member"} •{" "}
                 {fmtDate(selected.created_at)} •{" "}
-                <Badge variant="secondary">{tabOf(selected)}</Badge>
+                <Badge variant="secondary">
+                  {VISIBILITY_LABELS[selected.visibility]?.icon} {VISIBILITY_LABELS[selected.visibility]?.label ?? selected.visibility}
+                </Badge>
               </div>
               {selected.events && (
                 <Badge variant="outline" className="mt-2 text-amber-700 border-amber-300 bg-amber-50 text-xs">
@@ -250,11 +327,7 @@ export default function Blogs() {
                 ))}
               </div>
               {selected.image_url && (
-                <img
-                  src={selected.image_url}
-                  alt=""
-                  className="mt-3 w-full rounded-lg object-cover max-h-40"
-                />
+                <MediaPreview url={selected.image_url} className="mt-3 w-full rounded-lg object-cover max-h-40" />
               )}
               <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">
                 {selected.content}
@@ -297,11 +370,7 @@ function PostCard({
       className={`text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md ${active ? "ring-2 ring-primary/30" : ""}`}
     >
       {post.image_url && (
-        <img
-          src={post.image_url}
-          alt=""
-          className="w-full h-28 object-cover rounded-lg mb-3"
-        />
+        <MediaPreview url={post.image_url} className="w-full h-28 object-cover rounded-lg mb-3" />
       )}
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -310,8 +379,8 @@ function PostCard({
             By {author} • {fmtDate(post.created_at)}
           </div>
         </div>
-        <Badge variant={status === "published" ? "secondary" : "outline"}>
-          {status}
+        <Badge variant={post.visibility === "private" ? "outline" : "secondary"}>
+          {VISIBILITY_LABELS[post.visibility]?.icon} {VISIBILITY_LABELS[post.visibility]?.label ?? post.visibility}
         </Badge>
       </div>
       {post.events && (
@@ -342,12 +411,16 @@ type FormPayload = {
   hashtags: string[];
   author_id: string;
   event_id: string | null;
+  visibility: "private" | "family" | "open" | "public";
+  familyId?: string | null;
 };
 
 function PostForm({
   post,
   activeEvents,
   authorId,
+  familyId,
+  enableVideoUpload,
   onCancel,
   onSave,
   onDelete,
@@ -355,48 +428,83 @@ function PostForm({
   post?: Update;
   activeEvents: { id: string; title: string }[];
   authorId: string;
+  familyId: string | null;
+  enableVideoUpload: boolean;
   onCancel: () => void;
   onSave: (p: FormPayload) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
   const [title, setTitle] = useState(post?.title ?? "New Post");
-  const [content, setContent] = useState(post?.content ?? "");
+  const [visibility, setVisibility] = useState<"private" | "family" | "open" | "public">(post?.visibility ?? "private");
+  // Multi-section content: existing posts split on double-newline, new posts start with one section
+  const [sections, setSections] = useState<string[]>(
+    post?.content ? post.content.split(/\n\n+/) : [""]
+  );
+  const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [tags, setTags] = useState((post?.hashtags ?? []).join(", "));
   const [selectedEventId, setSelectedEventId] = useState(post?.event_id ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(post?.image_url ?? "");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+
+  function updateSection(idx: number, val: string) {
+    setSections((prev) => prev.map((s, i) => i === idx ? val : s));
+  }
+
+  function addSectionAfter(idx: number) {
+    setSections((prev) => [...prev.slice(0, idx + 1), "", ...prev.slice(idx + 1)]);
+  }
+
+  function removeSection(idx: number) {
+    setSections((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev);
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.startsWith("video/") && !enableVideoUpload) {
+      setError("Video uploads require a subscription plan.");
+      e.target.value = "";
+      return;
+    }
+    const maxMB = file.type.startsWith("video/") ? 40 : 10;
+    if (file.size > maxMB * 1024 * 1024) {
+      setError(`File too large — max ${maxMB}MB for ${file.type.startsWith("video/") ? "videos" : "images"}. Try compressing it first.`);
+      e.target.value = "";
+      return;
+    }
+    setError("");
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(idx: number) {
     if (!title.trim()) { setError("Add a title first"); return; }
-    setGenerating(true);
+    setGeneratingIdx(idx);
     setError("");
     try {
       let uploadedUrl: string | null = null;
-      if (imageFile) {
-        uploadedUrl = await uploadImage(imageFile);
+      if (imageFile && !imageFile.type.startsWith("video/")) {
+        uploadedUrl = await uploadImage(imageFile, familyId);
         setImagePreview(uploadedUrl);
         setImageFile(null);
       }
       const { description } = await callEdgeFunction("generate-description", {
         title,
+        content: sections[idx].trim() || null,
         imageUrl: uploadedUrl,
         hashtags: parseTags(tags),
+        eventId: selectedEventId || null,
+        authorId,
+        familyId,
       });
-      setContent(description);
+      updateSection(idx, description);
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setGenerating(false);
+      setGeneratingIdx(null);
     }
   }
 
@@ -408,17 +516,20 @@ function PostForm({
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        imageUrl = await uploadImage(imageFile, familyId);
       } else if (imagePreview?.startsWith("http")) {
         imageUrl = imagePreview;
       }
+      const combined = sections.map((s) => s.trim()).filter(Boolean).join("\n\n") || null;
       await onSave({
         title: title.trim(),
-        content: content.trim() || null,
+        content: combined,
         image_url: imageUrl,
         hashtags: parseTags(tags),
         author_id: authorId,
         event_id: selectedEventId || null,
+        visibility,
+        familyId,
       });
     } catch (e: any) {
       setError(e.message);
@@ -447,27 +558,37 @@ function PostForm({
         </label>
       )}
 
-      {/* Image */}
-      <label className="grid gap-1">
-        <span className="text-xs text-muted-foreground">Image (optional)</span>
-        <div
-          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition"
-          onClick={() => document.getElementById("blog-img-input")?.click()}
-        >
+      {/* Photo / Video */}
+      <div className="grid gap-1">
+        <span className="text-xs text-muted-foreground">Photo or Video (optional)</span>
+        <label className="block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition">
           {imagePreview ? (
-            <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
+            imageFile?.type.startsWith("video/") || isVideoUrl(imagePreview) ? (
+              <video src={imagePreview} className="max-h-28 mx-auto rounded-md pointer-events-none" />
+            ) : (
+              <img src={imagePreview} alt="" className="max-h-28 mx-auto rounded-md object-contain" />
+            )
           ) : (
-            <span className="text-xs text-muted-foreground">Click to upload a photo</span>
+            <span className="text-xs text-muted-foreground">{enableVideoUpload ? "Click to upload a photo or video" : "Click to upload a photo"}</span>
           )}
-        </div>
-        <input
-          id="blog-img-input"
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFile}
-        />
-      </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={enableVideoUpload ? "image/*,video/*" : "image/*"}
+            className="sr-only"
+            onChange={handleFile}
+          />
+        </label>
+        {imagePreview && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-destructive text-right"
+            onClick={() => { setImagePreview(""); setImageFile(null); }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
 
       {/* Title */}
       <label className="grid gap-1">
@@ -488,36 +609,88 @@ function PostForm({
         />
       </label>
 
-      {/* Content with AI button */}
-      <label className="grid gap-1">
-        <span className="text-xs text-muted-foreground flex items-center justify-between">
-          Content
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-1 text-primary hover:text-primary/80 font-medium"
-          >
-            {generating
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <Sparkles className="h-3 w-3" />}
-            {generating ? "Generating…" : "✨ Generate with AI"}
-          </button>
-        </span>
-        <Textarea
-          rows={6}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Add a description or let AI generate one…"
-        />
-      </label>
+      {/* Multi-section content */}
+      <div className="grid gap-1">
+        <span className="text-xs text-muted-foreground">Content</span>
+        {sections.map((sec, idx) => (
+          <div key={idx} className="grid gap-1">
+            <span className="text-xs text-muted-foreground flex items-center justify-between">
+              {sections.length > 1 && (
+                <span className="text-muted-foreground/60">Section {idx + 1}</span>
+              )}
+              <span className="ml-auto flex items-center gap-2">
+                {sections.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSection(idx)}
+                    className="text-muted-foreground/50 hover:text-destructive text-xs"
+                  >
+                    Remove
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleGenerate(idx)}
+                  disabled={generatingIdx !== null}
+                  className="flex items-center gap-1 text-primary hover:text-primary/80 font-medium"
+                >
+                  {generatingIdx === idx
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Sparkles className="h-3 w-3" />}
+                  {generatingIdx === idx ? "Generating…" : "✨ Generate with AI"}
+                </button>
+              </span>
+            </span>
+            <Textarea
+              rows={5}
+              value={sec}
+              onChange={(e) => updateSection(idx, e.target.value)}
+              placeholder="Add a description or let AI generate one…"
+            />
+            <button
+              type="button"
+              onClick={() => addSectionAfter(idx)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary mx-auto mt-1"
+            >
+              <Plus className="h-3 w-3" /> Add section
+            </button>
+          </div>
+        ))}
+      </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Visibility picker — compact chips, ADR-010 */}
+      <div className="mt-3">
+        <p className="text-xs text-muted-foreground mb-1.5">Visibility</p>
+        <div className="flex flex-wrap gap-1.5">
+          {(["private", "family", "open", "public"] as const).map((v) => {
+            const meta = VISIBILITY_LABELS[v];
+            const selected = visibility === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                title={meta.description}
+                onClick={() => setVisibility(v)}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  selected
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <span>{meta.icon}</span>
+                <span>{meta.short}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSubmit} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          Save
+          {visibility === "private" ? "Save draft" : "Save"}
         </Button>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>

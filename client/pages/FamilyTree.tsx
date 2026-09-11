@@ -1,215 +1,448 @@
+/**
+ * Family Tree page — ADR-012
+ * Uses flat family_tree_nodes rows (not JSONB blob).
+ * Supports 200-1000+ nodes via collapse-by-default + member search.
+ */
+
 import FamilyTree, { Member } from "@/components/FamilyTree";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useFamily } from "@/contexts/FamilyContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { UserCheck, Search, ChevronsDownUp, ChevronsUpDown, X } from "lucide-react";
+import {
+  fetchFamilyTreeNodes, upsertTreeNode, deleteTreeNode,
+  type FlatTreeNode,
+} from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
-function clone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v));
+// ── Flat ↔ Nested conversion ─────────────────────────────────────────────────
+
+function flatToMember(n: FlatTreeNode): Member {
+  return {
+    id: n.id,
+    name: n.name,
+    born: n.born ?? undefined,
+    avatar: n.avatar ?? undefined,
+    userId: n.user_id ?? undefined,
+    partner: n.partner_name ? { name: n.partner_name, born: n.partner_born ?? undefined } : undefined,
+    email: n.email ?? undefined,
+    phone: n.phone ?? undefined,
+    address: n.address ?? undefined,
+  };
 }
 
-function updateNode(
-  root: Member,
-  id: string,
-  mutator: (node: Member) => void,
-): Member {
-  if (root.id === id) {
-    const next = {
-      ...root,
-      children: root.children ? [...root.children] : undefined,
-    } as Member;
-    mutator(next);
-    return next;
+function buildTree(nodes: FlatTreeNode[]): Member | null {
+  if (!nodes.length) return null;
+  const map = new Map(nodes.map(n => [n.id, { ...flatToMember(n), children: [] as Member[] }]));
+  let root: Member | null = null;
+  const sorted = [...nodes].sort((a, b) => a.sort_order - b.sort_order);
+  for (const n of sorted) {
+    if (!n.parent_id) { root = map.get(n.id)!; }
+    else { map.get(n.parent_id)?.children.push(map.get(n.id)!); }
   }
-  if (!root.children) return root;
-  let changed = false;
-  const nextChildren = root.children.map((c) => {
-    const updated = updateNode(c, id, mutator);
-    if (updated !== c) changed = true;
-    return updated;
-  });
-  if (!changed) return root;
-  return { ...root, children: nextChildren };
+  return root;
 }
 
-function insertSibling(root: Member, id: string, create: () => Member): Member {
-  if (!root.children) return root;
-  const idx = root.children.findIndex((c) => c.id === id);
-  if (idx !== -1) {
-    const next = [...root.children];
-    next.splice(idx + 1, 0, create());
-    return { ...root, children: next };
-  }
-  let changed = false;
-  const nextChildren = root.children.map((c) => {
-    const updated = insertSibling(c, id, create);
-    if (updated !== c) changed = true;
-    return updated;
-  });
-  if (!changed) return root;
-  return { ...root, children: nextChildren };
+// ── Search helpers ───────────────────────────────────────────────────────────
+
+function searchMatchIds(root: Member, q: string): Set<string> {
+  const matches = new Set<string>();
+  const lq = q.toLowerCase();
+  const walk = (node: Member, ancestors: string[]) => {
+    const hit = node.name.toLowerCase().includes(lq)
+      || (node.partner?.name ?? "").toLowerCase().includes(lq);
+    const path = [...ancestors, node.id];
+    if (hit) path.forEach(id => matches.add(id));
+    for (const c of node.children ?? []) walk(c, path);
+  };
+  walk(root, []);
+  return matches;
 }
 
-function insertChild(root: Member, id: string, create: () => Member): Member {
-  return updateNode(root, id, (n) => {
-    const children = n.children ? [...n.children] : [];
-    children.push(create());
-    n.children = children;
-  });
-}
-
-function findParentId(
-  root: Member,
-  id: string,
-  parentId: string | null = null,
-): string | null {
-  if (root.id === id) return parentId;
-  for (const c of root.children ?? []) {
-    const res = findParentId(c, id, root.id);
-    if (res) return res;
-  }
-  return null;
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FamilyTreePage() {
-  const initial: Member = useMemo(
-    () => ({
-      id: "root",
-      name: "Pat & Jordan",
-      born: "1962/1964",
-      children: [
-        {
-          id: "a1",
-          name: "Alex",
-          born: "1987",
-          children: [
-            { id: "a1a", name: "Maya", born: "2015" },
-            { id: "a1b", name: "Evan", born: "2018" },
-          ],
-        },
-        {
-          id: "b1",
-          name: "Taylor",
-          born: "1990",
-          children: [{ id: "b1a", name: "Riley", born: "2020" }],
-        },
-        { id: "c1", name: "Casey", born: "1993" },
-      ],
-    }),
-    [],
-  );
+  const { activeFamilyId, activeFamily } = useFamily();
+  const { session, profile, openAuthModal } = useAuth();
+  const { toast } = useToast();
 
-  const [tree, setTree] = useState<Member>(initial);
-  const [selectedId, setSelectedId] = useState<string>(initial.id);
-  const selected = useMemo(() => {
-    let found: Member | null = null;
-    const walk = (n: Member) => {
-      if (n.id === selectedId) {
-        found = n;
-        return;
+  const [nodes, setNodes]       = useState<FlatTreeNode[]>([]);
+  const [loading, setLoading]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch]     = useState("");
+  // treeKey forces FamilyTree remount on expand/collapse all
+  const [treeKey, setTreeKey]   = useState(0);
+  const [allExpanded, setAllExpanded] = useState<boolean | null>(null); // null = default
+
+  // ── Load flat nodes ────────────────────────────────────────────────────────
+
+  const load = useCallback(async () => {
+    if (!activeFamilyId) { setNodes([]); return; }
+    setLoading(true);
+    try {
+      const data = await fetchFamilyTreeNodes(activeFamilyId);
+      setNodes(data);
+      if (data.length > 0 && !selectedId) {
+        const root = data.find(n => !n.parent_id);
+        if (root) setSelectedId(root.id);
       }
-      for (const c of n.children ?? []) if (!found) walk(c);
-    };
-    walk(tree);
-    return found ?? tree;
-  }, [selectedId, tree]);
+    } catch (e: any) {
+      toast({ title: "Failed to load tree", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  }, [activeFamilyId]);
 
-  const [name, setName] = useState(selected.name);
-  const [born, setBorn] = useState(selected.born ?? "");
+  useEffect(() => { load(); }, [load]);
+
+  // ── Derived tree ───────────────────────────────────────────────────────────
+
+  const tree = useMemo(() => buildTree(nodes), [nodes]);
+
+  const searchMatches = useMemo(() => {
+    if (!search.trim() || !tree) return null;
+    return searchMatchIds(tree, search.trim());
+  }, [search, tree]);
+
+  const selected = useMemo(() => {
+    if (!selectedId) return null;
+    return nodes.find(n => n.id === selectedId) ?? null;
+  }, [selectedId, nodes]);
+
+  // ── Sidebar form state ─────────────────────────────────────────────────────
+
+  const [name, setName]               = useState("");
+  const [born, setBorn]               = useState("");
+  const [partnerName, setPartnerName] = useState("");
+  const [partnerBorn, setPartnerBorn] = useState("");
+  const [email, setEmail]             = useState("");
+  const [phone, setPhone]             = useState("");
+  const [address, setAddress]         = useState("");
+
   useEffect(() => {
-    setName(selected.name);
-    setBorn(selected.born ?? "");
-  }, [selectedId]);
+    setName(selected?.name ?? "");
+    setBorn(selected?.born ?? "");
+    setPartnerName(selected?.partner_name ?? "");
+    setPartnerBorn(selected?.partner_born ?? "");
+    setEmail(selected?.email ?? "");
+    setPhone(selected?.phone ?? "");
+    setAddress(selected?.address ?? "");
+  }, [selectedId, selected]);
 
-  const canAddSibling = findParentId(tree, selectedId) !== null;
+  // ── Save / Add ─────────────────────────────────────────────────────────────
 
-  const saveDetails = () => {
-    setTree((prev) =>
-      updateNode(prev, selectedId, (n) => {
-        n.name = name;
-        n.born = born || undefined;
-      }),
-    );
+  const saveDetails = async () => {
+    if (!selected || !activeFamilyId) return;
+    setSaving(true);
+    try {
+      const updated = await upsertTreeNode({
+        id: selected.id,
+        family_id: activeFamilyId,
+        parent_id: selected.parent_id,
+        name: name.trim() || "Member",
+        born: born.trim() || null,
+        partner_name: partnerName.trim() || null,
+        partner_born: partnerBorn.trim() || null,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        address: address.trim() || null,
+        avatar: selected.avatar,
+        user_id: selected.user_id,
+        sort_order: selected.sort_order,
+      });
+      setNodes(prev => prev.map(n => n.id === updated.id ? updated : n));
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
   };
 
-  const addChild = () => {
-    const id = Math.random().toString(36).slice(2, 8);
-    setTree((prev) =>
-      insertChild(prev, selectedId, () => ({
-        id,
+  const addChild = async () => {
+    if (!selectedId || !activeFamilyId) return;
+    setSaving(true);
+    try {
+      const siblings = nodes.filter(n => n.parent_id === selectedId);
+      const newNode = await upsertTreeNode({
+        id: crypto.randomUUID(),
+        family_id: activeFamilyId,
+        parent_id: selectedId,
         name: "New Member",
-        born: undefined,
-      })),
-    );
-    setSelectedId(id);
+        sort_order: siblings.length,
+      });
+      setNodes(prev => [...prev, newNode]);
+      setSelectedId(newNode.id);
+    } catch (e: any) {
+      toast({ title: "Failed to add child", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
   };
 
-  const addSibling = () => {
-    const parentId = findParentId(tree, selectedId);
+  const addSibling = async () => {
+    if (!selected || !activeFamilyId) return;
+    const parentId = selected.parent_id;
     if (!parentId) return;
-    const id = Math.random().toString(36).slice(2, 8);
-    setTree((prev) =>
-      insertSibling(prev, selectedId, () => ({
-        id,
+    setSaving(true);
+    try {
+      const siblings = nodes.filter(n => n.parent_id === parentId);
+      const newNode = await upsertTreeNode({
+        id: crypto.randomUUID(),
+        family_id: activeFamilyId,
+        parent_id: parentId,
         name: "New Sibling",
-        born: undefined,
-      })),
-    );
-    setSelectedId(id);
+        sort_order: siblings.length,
+      });
+      setNodes(prev => [...prev, newNode]);
+      setSelectedId(newNode.id);
+    } catch (e: any) {
+      toast({ title: "Failed to add sibling", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
   };
+
+  const startTree = async () => {
+    if (!activeFamilyId) return;
+    setSaving(true);
+    try {
+      const root = await upsertTreeNode({
+        id: crypto.randomUUID(),
+        family_id: activeFamilyId,
+        parent_id: null,
+        name: `${activeFamily?.name ?? "Family"} Root`,
+        sort_order: 0,
+      });
+      setNodes([root]);
+      setSelectedId(root.id);
+    } catch (e: any) {
+      toast({ title: "Failed to create tree", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  // ── "This is me" ───────────────────────────────────────────────────────────
+
+  const isSelectedMe = !!selected && !!session && selected.user_id === session.user.id;
+
+  const toggleFlagAsMe = async () => {
+    if (!selected || !session || !activeFamilyId) return;
+    setSaving(true);
+    try {
+      let patch: Partial<FlatTreeNode>;
+      if (isSelectedMe) {
+        patch = { user_id: null, avatar: null };
+      } else {
+        const avatar = profile?.avatar_url
+          ?? session.user.user_metadata?.avatar_url
+          ?? session.user.user_metadata?.picture ?? null;
+        const fullName = profile?.full_name
+          ?? session.user.user_metadata?.full_name
+          ?? session.user.user_metadata?.name ?? name;
+        patch = { user_id: session.user.id, avatar, name: fullName, email: session.user.email ?? null };
+        setName(fullName);
+        setEmail(session.user.email ?? email);
+      }
+      const updated = await upsertTreeNode({ ...selected, ...patch });
+      setNodes(prev => prev.map(n => n.id === updated.id ? updated : n));
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  // ── Focus node: the node flagged as "me" ─────────────────────────────────
+  // Auto-expands the path from root → me → children (ADR-012)
+  const meNodeId = useMemo(() => {
+    if (!session) return undefined;
+    return nodes.find(n => n.user_id === session.user.id)?.id;
+  }, [nodes, session]);
+
+  // ── Expand / Collapse all ──────────────────────────────────────────────────
+
+  const expandAll  = () => { setAllExpanded(true);  setTreeKey(k => k + 1); };
+  const collapseAll = () => { setAllExpanded(false); setTreeKey(k => k + 1); };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const isPreview = !session || !activeFamilyId;
+
+  if (loading && !isPreview) {
+    return <div className="container py-16 text-center text-muted-foreground">Loading family tree…</div>;
+  }
+
+  if (!tree && !isPreview) {
+    return (
+      <div className="container py-16 flex flex-col items-center gap-4 text-center">
+        <p className="text-lg font-semibold">
+          No family tree yet for <span className="text-rose-600">{activeFamily?.name}</span>
+        </p>
+        <p className="text-muted-foreground text-sm max-w-sm">
+          Start by adding the first member — you can build the full tree from there.
+        </p>
+        <Button onClick={startTree} disabled={saving}>{saving ? "Creating…" : "Start Family Tree"}</Button>
+      </div>
+    );
+  }
+
+  function requireAuth(action: () => void) {
+    if (isPreview) openAuthModal({ defaultTab: 'signup', redirectTo: '/family-tree' });
+    else action();
+  }
+
+  const canAddSibling = !isPreview && !!selected?.parent_id;
+
+  // Member to display in sidebar (uses Member type for partner display)
+  const selectedMember = tree ? (() => {
+    const walk = (n: Member): Member | null => {
+      if (n.id === selectedId) return n;
+      for (const c of n.children ?? []) { const r = walk(c); if (r) return r; }
+      return null;
+    };
+    return walk(tree);
+  })() : null;
 
   return (
     <div className="container py-8">
       <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_360px]">
         <div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-            Family Tree
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Click a person to edit details. Use the actions to add children or
-            siblings.
-          </p>
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Family Tree</h1>
+                {saving && <span className="text-xs text-muted-foreground animate-pulse">Saving…</span>}
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                Build and explore your family tree together. Add members, connect generations, and watch your family grow across branches.
+              </p>
+              {activeFamily && (
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {activeFamily.name} · {nodes.length} member{nodes.length !== 1 ? "s" : ""} · Click a person to edit.
+                </p>
+              )}
+            </div>
+            {/* Expand / Collapse all — only for real (non-preview) trees */}
+            {!isPreview && tree && (
+              <div className="flex gap-1 shrink-0 mt-1">
+                <button onClick={expandAll}
+                  title="Expand all branches"
+                  className="rounded-lg border p-1.5 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors">
+                  <ChevronsUpDown className="h-4 w-4" />
+                </button>
+                <button onClick={collapseAll}
+                  title="Collapse all branches"
+                  className="rounded-lg border p-1.5 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors">
+                  <ChevronsDownUp className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Search — only for real trees with > 5 nodes */}
+          {!isPreview && nodes.length > 5 && (
+            <div className="mt-4 relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9 pr-8"
+                placeholder="Search members by name…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {search && (
+                <button onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+              {search && searchMatches && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {searchMatches.size === 0 ? "No matches" : `${searchMatches.size} match${searchMatches.size !== 1 ? "es" : ""}`}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Tree */}
           <div className="mt-6 rounded-xl border bg-card p-4">
             <FamilyTree
-              data={tree}
-              selectedId={selectedId}
+              key={treeKey}
+              data={isPreview ? undefined : tree ?? undefined}
+              selectedId={selectedId ?? undefined}
               onSelect={(n) => setSelectedId(n.id)}
+              currentUserId={session?.user.id}
+              defaultExpanded={allExpanded}
+              focusNodeId={meNodeId}
+              searchMatches={searchMatches ?? undefined}
             />
           </div>
         </div>
 
+        {/* Sidebar */}
         <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
-          <div className="text-sm text-muted-foreground">Selected member</div>
-          <div className="mt-1 text-lg font-semibold">{selected.name}</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">Selected member</div>
+            {!isPreview && selectedMember && (
+              <button onClick={toggleFlagAsMe}
+                title={isSelectedMe ? "Unlink my profile" : "This is me — link my profile"}
+                className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
+                  isSelectedMe
+                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                    : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                }`}>
+                <UserCheck className="h-3.5 w-3.5" />
+                {isSelectedMe ? "That's me" : "This is me"}
+              </button>
+            )}
+          </div>
+          <div className="mt-1 text-lg font-semibold">
+            {isPreview ? "Grandparent"
+              : selectedMember?.partner
+              ? `${selectedMember.name} ♥ ${selectedMember.partner.name}`
+              : selectedMember?.name ?? "—"}
+          </div>
+
           <div className="mt-4 grid gap-3">
             <label className="grid gap-1">
               <span className="text-xs text-muted-foreground">Name</span>
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                value={isPreview ? "Grandparent" : name}
+                onChange={e => !isPreview && setName(e.target.value)} readOnly={isPreview} />
             </label>
             <label className="grid gap-1">
-              <span className="text-xs text-muted-foreground">
-                Born (YYYY or range)
-              </span>
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                value={born}
-                onChange={(e) => setBorn(e.target.value)}
-              />
+              <span className="text-xs text-muted-foreground">Born (YYYY or range)</span>
+              <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                value={isPreview ? "1940s" : born}
+                onChange={e => !isPreview && setBorn(e.target.value)} readOnly={isPreview} />
             </label>
-            <div className="flex gap-2 pt-2">
-              <Button onClick={saveDetails}>Save</Button>
-              <Button variant="outline" onClick={addChild}>
-                Add Child
+
+            <div className="border-t pt-3 grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <span className="text-rose-400">♥</span> Partner / Spouse
+              </span>
+              <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                placeholder="Partner name (optional)"
+                value={isPreview ? "Grandmother" : partnerName}
+                onChange={e => !isPreview && setPartnerName(e.target.value)} readOnly={isPreview} />
+              <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                placeholder="Born (optional)"
+                value={isPreview ? "1942" : partnerBorn}
+                onChange={e => !isPreview && setPartnerBorn(e.target.value)} readOnly={isPreview} />
+              {!isPreview && <p className="text-[11px] text-muted-foreground">Leave blank to remove partner.</p>}
+            </div>
+
+            {!isPreview && (
+              <div className="border-t pt-3 grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Contact (optional, private)</span>
+                <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                <input className="h-10 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+                <textarea className="rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  placeholder="Address" rows={2} value={address} onChange={e => setAddress(e.target.value)} />
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Button disabled={saving} onClick={() => requireAuth(saveDetails)}>
+                {saving ? "Saving…" : "Save"}
               </Button>
-              <Button
-                variant="outline"
-                disabled={!canAddSibling}
-                onClick={addSibling}
-              >
-                Add Sibling
-              </Button>
+              <Button variant="outline" disabled={saving} onClick={() => requireAuth(addChild)}>Add Child</Button>
+              <Button variant="outline" disabled={(!isPreview && !canAddSibling) || saving}
+                onClick={() => requireAuth(addSibling)}>Add Sibling</Button>
             </div>
           </div>
         </aside>

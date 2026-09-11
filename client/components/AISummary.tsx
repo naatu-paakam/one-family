@@ -1,80 +1,77 @@
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { callEdgeFunction } from "@/lib/supabase";
+import { Loader2 } from "lucide-react";
 
-function summarize(text: string) {
-  const clean = text.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
-  const sentences = clean.split(/(?<=[.!?])\s+/).slice(0, 4);
-  const words = clean.toLowerCase().match(/[a-zA-Z']+/g) || [];
-  const stop = new Set([
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "but",
-    "to",
-    "of",
-    "in",
-    "on",
-    "for",
-    "with",
-    "at",
-    "by",
-    "from",
-    "is",
-    "it",
-    "that",
-    "we",
-    "our",
-  ]);
-  const freq = new Map<string, number>();
-  for (const w of words)
-    if (!stop.has(w) && w.length > 2) freq.set(w, (freq.get(w) || 0) + 1);
-  const top = [...freq.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([w]) => w);
-  const summary = sentences.join(" ");
-  return { summary, keywords: top };
+type Post = {
+  title: string;
+  content: string | null;
+  profiles: { full_name: string | null } | null;
+};
+
+function fallbackSummary(posts: Post[], eventCount: number): string | null {
+  if (posts.length === 0 && eventCount === 0) return null;
+  const authors = [
+    ...new Set(posts.map((p) => p.profiles?.full_name).filter(Boolean)),
+  ] as string[];
+  const names = authors.slice(0, 2).join(" and ");
+
+  if (eventCount > 0 && posts.length > 0)
+    return `Your family is buzzing! ${names ? `${names} ${authors.length > 1 ? "have" : "has"} been sharing stories` : "Stories are being shared"} and ${eventCount > 1 ? `${eventCount} events are` : "an event is"} bringing everyone together. 🎉`;
+  if (eventCount > 0)
+    return `Something exciting is happening — ${eventCount > 1 ? `${eventCount} events are` : "an event is"} bringing your family together right now. Don't miss it! 🎊`;
+  if (posts.length > 0) {
+    const line = `${names ? `${names} ${authors.length > 1 ? "have" : "has"} been adding to` : "Your family is building"} your family's story — keep the memories coming! 📖`;
+    return posts.length >= 3
+      ? `${line} With ${posts.length} stories shared, your family archive is growing beautifully.`
+      : line;
+  }
+  return null;
 }
 
-export default function AISummary() {
-  const [text, setText] = useState(
-    "Grandma's 80th birthday was filled with stories, photos, and a surprise video call. We shared homemade recipes and planned a reunion picnic next month.",
-  );
-  const { summary, keywords } = useMemo(() => summarize(text), [text]);
+export default function AISummary({
+  posts = [],
+  eventCount = 0,
+  familyId,
+}: {
+  posts?: Post[];
+  eventCount?: number;
+  familyId?: string | null;
+}) {
+  const [aiText, setAiText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!familyId || (posts.length === 0 && eventCount === 0)) {
+      setAiText(null);
+      return;
+    }
+    setLoading(true);
+    setAiText(null);
+    callEdgeFunction("generate-summary", { familyId })
+      .then((res) => setAiText(res?.summary ?? null))
+      .catch(() => setAiText(null))
+      .finally(() => setLoading(false));
+  }, [familyId, posts.length, eventCount]);
+
+  const text = aiText ?? fallbackSummary(posts, eventCount);
 
   return (
     <div className="rounded-xl border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold">AI Summary (demo)</h3>
-        <Button size="sm" onClick={() => setText(text + " ")}>
-          Refresh
-        </Button>
+        <h3 className="font-semibold">Family Activity Summary</h3>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
-      <textarea
-        className="mt-3 w-full resize-none rounded-md border bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <div className="mt-4 text-sm">
-        <div className="text-muted-foreground">Summary</div>
-        <p className="mt-1">{summary}</p>
-      </div>
-      <div className="mt-3 text-sm">
-        <div className="text-muted-foreground">Keywords</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {keywords.map((k) => (
-            <span
-              key={k}
-              className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
-            >
-              {k}
-            </span>
-          ))}
-        </div>
-      </div>
+      {loading && !text ? (
+        <p className="mt-3 text-sm text-muted-foreground animate-pulse">
+          Generating your family's highlight…
+        </p>
+      ) : text ? (
+        <p className="mt-3 text-sm text-foreground leading-relaxed">{text}</p>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground leading-snug">
+          No activity yet — once your family adds stories or starts events, highlights will appear here automatically.
+        </p>
+      )}
     </div>
   );
 }

@@ -108,12 +108,17 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
+  const body = await req.json().catch(() => ({}))
+  const familyId: string | undefined = body.familyId
+
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
-  const { data: events, error } = await supabase
+  let query = supabase
     .from('updates')
     .select('title, content, hashtags, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: true })
+  if (familyId) query = query.eq('family_id', familyId)
+  const { data: events, error } = await query
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -122,7 +127,7 @@ Deno.serve(async (req) => {
   }
 
   if (!events?.length) {
-    return new Response(JSON.stringify({ summary: 'No updates in the last 7 days. Stay tuned!' }), {
+    return new Response(JSON.stringify({ summary: null }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -138,8 +143,8 @@ Deno.serve(async (req) => {
     const accessToken = await getGcpAccessToken(saJson)
     const summary = await callVertexClaude(
       accessToken, projectId, model,
-      'You are a warm family newsletter writer. Keep summaries brief, joyful, and inclusive.',
-      [{ role: 'user', content: `Here are this week\'s family updates:\n${eventList}\n\nWrite a 3–4 sentence summary celebrating these moments.` }],
+      'You are a warm, uplifting family storyteller. Your job is to read recent family activity and respond with 2–3 short encouraging sentences that celebrate what the family is doing, make everyone feel seen and valued, and inspire them to keep sharing memories together. Be personal, joyful, and specific to what was shared — never generic. No bullet points, no headers, just heartfelt prose.',
+      [{ role: 'user', content: `Here are this week\'s family updates:\n${eventList}\n\nWrite an encouraging 2–3 sentence highlight that celebrates these moments and motivates the family to keep adding more memories.` }],
       300,
     )
 

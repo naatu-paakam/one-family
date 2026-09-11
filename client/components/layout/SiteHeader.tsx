@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,34 +21,58 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
-import { LogOut, PenSquare, CalendarPlus } from "lucide-react"; // PenSquare/CalendarPlus used in dropdown
+import { LogOut, PenSquare, CalendarPlus, Settings, Shield } from "lucide-react";
+import FamilyMenu from "./FamilyMenu";
+import { useFamily } from "@/contexts/FamilyContext";
 
 function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { signInWithGoogle, signInWithEmail } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, authModalOptions } = useAuth();
+  const navigate = useNavigate();
+  const defaultTab = authModalOptions.defaultTab ?? "signin";
+  const redirectTo = authModalOptions.redirectTo;
+
+  const [mode, setMode] = useState<"signin" | "signup">(defaultTab);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleEmail(e: React.FormEvent) {
+  // Sync tab when modal options change (e.g. reopened with different defaultTab)
+  useEffect(() => { if (open) setMode(defaultTab); }, [open, defaultTab]);
+
+  function reset() { setEmail(""); setPassword(""); setFullName(""); setError(""); setSuccess(""); }
+
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setLoading(true);
+    setError(""); setLoading(true);
     try {
       await signInWithEmail(email, password);
       onClose();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      if (redirectTo) navigate(redirectTo);
     }
+    catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
+  }
+
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      await signUpWithEmail(email, password, fullName);
+      const extra = redirectTo ? " After confirming, sign in and we'll take you to create your family." : "";
+      setSuccess(`Check your email to confirm your account, then sign in.${extra}`);
+    }
+    catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Sign in to Family Vibes</DialogTitle>
+          <DialogTitle>{mode === "signin" ? "Sign in to Family Vibes" : "Create your account"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 mt-2">
           <Button variant="outline" className="w-full" onClick={signInWithGoogle}>
@@ -66,20 +90,44 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               <span className="bg-background px-2 text-muted-foreground">or</span>
             </div>
           </div>
-          <form onSubmit={handleEmail} className="space-y-3">
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign In"}
-            </Button>
-          </form>
+          {success ? (
+            <p className="text-sm text-emerald-600 text-center">{success}</p>
+          ) : (
+            <form onSubmit={mode === "signin" ? handleSignIn : handleSignUp} className="space-y-3">
+              {mode === "signup" && (
+                <div>
+                  <Label htmlFor="fullName">Full name</Label>
+                  <Input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                </div>
+              )}
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </div>
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (mode === "signin" ? "Signing in…" : "Creating account…") : (mode === "signin" ? "Sign In" : "Create Account")}
+              </Button>
+              {/* Secondary action as text link — no competing buttons */}
+              <p className="text-center text-sm text-muted-foreground">
+                {mode === "signin" ? (
+                  <>Don't have an account?{" "}
+                    <button type="button" className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      onClick={() => { setMode("signup"); reset(); }}>Sign up</button>
+                  </>
+                ) : (
+                  <>Already have an account?{" "}
+                    <button type="button" className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      onClick={() => { setMode("signin"); reset(); }}>Sign in</button>
+                  </>
+                )}
+              </p>
+            </form>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -135,8 +183,9 @@ function CreateEventModal({ open, onClose }: { open: boolean; onClose: () => voi
 
 export default function SiteHeader() {
   const location = useLocation();
-  const { session, profile, signOut, authModalOpen, openAuthModal, closeAuthModal } = useAuth();
+  const { session, profile, signOut, authModalOpen, openAuthModal, closeAuthModal, isPortalAdmin } = useAuth();
   const { activeEvents, endEvent } = useEvent();
+  const { activeFamily, isFamilyAdmin } = useFamily();
   const [showCreateEvent, setShowCreateEvent] = useState(false);
 
   const avatar = profile?.avatar_url || session?.user?.user_metadata?.picture || session?.user?.user_metadata?.avatar_url;
@@ -145,7 +194,7 @@ export default function SiteHeader() {
 
   const nav = [
     { to: "/", label: "Home" },
-    { to: "/blogs", label: "Blogs" },
+    { to: "/stories", label: "Stories" },
     { to: "/events", label: "Events" },
     { to: "/family-tree", label: "Family Tree" },
   ];
@@ -154,10 +203,15 @@ export default function SiteHeader() {
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-rose-400" />
+          <Link to="/" className="flex items-center gap-1.5">
+            <img src="/logo.svg" alt="Family Vibes" className="h-10 w-10 rounded-lg" />
             <span className="font-extrabold tracking-tight text-xl">Family Vibes</span>
           </Link>
+          {session && activeFamily && (
+            <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-3 py-1 rounded-full text-sm font-semibold bg-gradient-to-r from-rose-100 via-pink-100 to-red-100 text-rose-700 border border-rose-200 shadow-sm">
+              ❤️ {activeFamily.name}
+            </span>
+          )}
 
           <nav className="hidden md:flex items-center gap-6">
             {nav.map((item) => (
@@ -171,6 +225,9 @@ export default function SiteHeader() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm" aria-label="Why Family Vibes" className="hidden sm:inline-flex text-rose-600 hover:text-rose-700 hover:bg-rose-50">
+              <Link to="/why-family-vibes">Why Family Vibes?</Link>
+            </Button>
             {/* "Plan for Event" — always visible, opens create form on Events page */}
             <Button asChild variant="outline" size="sm" aria-label="Plan for Event">
               <Link to="/events?create=1">Plan for Event</Link>
@@ -178,6 +235,7 @@ export default function SiteHeader() {
 
             {session ? (
               <>
+                <FamilyMenu />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
@@ -191,11 +249,23 @@ export default function SiteHeader() {
                     <div className="px-2 py-1.5 text-sm font-medium truncate">{displayName}</div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link to="/blogs" className="gap-2"><PenSquare className="h-4 w-4" /> New Post</Link>
+                      <Link to="/stories" className="gap-2"><PenSquare className="h-4 w-4" /> New Post</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="gap-2 sm:hidden" onClick={() => setShowCreateEvent(true)}>
                       <CalendarPlus className="h-4 w-4" /> Create Event
                     </DropdownMenuItem>
+                    {/* [ROLE: family-admin] */}
+                    {isFamilyAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/family-settings" className="gap-2"><Settings className="h-4 w-4" /> Family Settings</Link>
+                      </DropdownMenuItem>
+                    )}
+                    {/* [ROLE: portal-admin] */}
+                    {isPortalAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/portal" className="gap-2"><Shield className="h-4 w-4" /> Portal Admin</Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={signOut}>
                       <LogOut className="h-4 w-4" /> Sign Out
@@ -205,7 +275,7 @@ export default function SiteHeader() {
               </>
             ) : (
               /* "Join Family" = Sign In when logged out — matches original button position */
-              <Button size="sm" aria-label="Join Family" onClick={openAuthModal}>
+              <Button size="sm" aria-label="Join Family" onClick={() => openAuthModal()}>
                 Join Family
               </Button>
             )}

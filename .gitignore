@@ -24,4 +24,17 @@ dist-ssr
 *.sw?
 
 .config/
-!.env
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI local state — contains project ref, DB URL, org ID
+supabase/.temp/
+
+# Private deployment notes — contains credentials, keys, test passwords
+.notes
+.playwright/
+
+# Playwright test artifacts — screenshots, videos, traces, results
+test-results/
+playwright-report/

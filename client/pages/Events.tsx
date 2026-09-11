@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import {
   fetchUpdates,
   callEdgeFunction,
@@ -15,7 +16,25 @@ import {
   addInvite,
   updateInviteStatus,
   updateEvent,
+  fetchComments,
+  fetchCommentCounts,
+  createComment,
+  deleteComment,
+  toggleReaction,
+  uploadImage,
 } from "@/lib/supabase";
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|ogg)(\?|$)/i.test(url);
+}
+
+function MediaPreview({ url, className }: { url: string; className: string }) {
+  return isVideoUrl(url) ? (
+    <video src={url} controls className={className} />
+  ) : (
+    <img src={url} alt="" className={className} />
+  );
+}
 import { format } from "date-fns";
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
@@ -50,6 +69,21 @@ type Invite = {
   created_at: string;
 };
 
+type Reaction = { comment_id: string; user_id: string; emoji: string };
+
+type Comment = {
+  id: string;
+  event_id: string;
+  author_id: string | null;
+  family_id: string;
+  content: string | null;
+  image_url: string | null;
+  parent_id: string | null;
+  created_at: string;
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
+  comment_reactions: Reaction[];
+};
+
 // Map a Supabase event to the original UI tab categories:
 //   upcoming = started_at in future, not closed
 //   ongoing  = started_at in past (or null), not closed
@@ -82,10 +116,12 @@ type Mode = "none" | "create" | "edit";
 export default function Events() {
   const { session, openAuthModal } = useAuth();
   const { activeEvents, startEvent, endEvent } = useEvent();
+  const { activeFamilyId, enableVideoUpload } = useFamily();
 
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
   const [invitesByEvent, setInvitesByEvent] = useState<Record<string, Invite[]>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("ongoing");
@@ -105,7 +141,7 @@ export default function Events() {
     async function load() {
       setLoading(true);
       try {
-        const posts = await fetchUpdates({ limit: 200 });
+        const posts = await fetchUpdates({ limit: 200, familyId: activeFamilyId });
         const evMap: Record<string, FamilyEvent> = {};
         for (const p of posts ?? []) {
           if (p.events && !evMap[p.events.id]) {
@@ -132,23 +168,27 @@ export default function Events() {
         }
         setEventPosts(map);
 
-        // Load invites for all events
+        // Load invites and comment counts for all events
         const ids = evList.map((e) => e.id);
         if (ids.length > 0) {
-          const allInvites = await fetchAllInvites(ids);
+          const [allInvites, counts] = await Promise.all([
+            fetchAllInvites(ids),
+            fetchCommentCounts(ids),
+          ]);
           const invMap: Record<string, Invite[]> = {};
           for (const inv of allInvites as Invite[]) {
             if (!invMap[inv.event_id]) invMap[inv.event_id] = [];
             invMap[inv.event_id].push(inv);
           }
           setInvitesByEvent(invMap);
+          setCommentCounts(counts);
         }
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [activeEvents]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeEvents, activeFamilyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -227,7 +267,7 @@ export default function Events() {
                 </TabsList>
                 <div className="flex md:justify-end">
                   <Button
-                    onClick={session ? () => setMode("create") : openAuthModal}
+                    onClick={session ? () => setMode("create") : () => openAuthModal()}
                     className="h-10 w-10 rounded-full p-0"
                     aria-label="New Event"
                     title="New Event"
@@ -251,6 +291,7 @@ export default function Events() {
                           key={ev.id}
                           ev={ev}
                           invites={invitesByEvent[ev.id] ?? []}
+                          commentCount={commentCounts[ev.id] ?? 0}
                           active={selected?.id === ev.id}
                           onSelect={() => {
                             setSelectedId(ev.id);
@@ -278,8 +319,8 @@ export default function Events() {
               <div className="text-sm text-muted-foreground">Create event</div>
               <CreateEventForm
                 onCancel={() => setMode("none")}
-                onSave={async ({ title, description, location }) => {
-                  await startEvent({ title, description, location });
+                onSave={async ({ title, description, location, visibility }) => {
+                  await startEvent({ title, description, location, visibility });
                   setMode("none");
                 }}
               />
@@ -303,6 +344,9 @@ export default function Events() {
                 activeEvents.some((e) => e.id === selected.id)
               }
               canModify={!!session}
+              session={session}
+              familyId={activeFamilyId}
+              enableVideoUpload={enableVideoUpload}
               onClose={() => {
                 if (confirm(`Close event "${selected.title}"?`)) endEvent(selected.id);
               }}
@@ -310,6 +354,9 @@ export default function Events() {
               onAddInvite={(name, email) => handleAddInvite(selected.id, name, email)}
               onUpdateStatus={(invId, status) =>
                 handleUpdateInviteStatus(invId, selected.id, status)
+              }
+              onCommentCountChange={(eventId, delta) =>
+                setCommentCounts((prev) => ({ ...prev, [eventId]: Math.max(0, (prev[eventId] ?? 0) + delta) }))
               }
             />
           ) : (
@@ -323,16 +370,437 @@ export default function Events() {
   );
 }
 
+/* ── CommentThread ───────────────────────────────────────────────────────────── */
+
+const EMOJIS = ["❤️", "😂", "😮", "👍", "🙌"];
+
+function CommentThread({
+  eventId,
+  familyId,
+  session,
+  enableVideoUpload,
+  onCommentCountChange,
+}: {
+  eventId: string;
+  familyId: string | null;
+  session: any;
+  enableVideoUpload: boolean;
+  onCommentCountChange?: (delta: number) => void;
+}) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchComments(eventId)
+      .then((data) => setComments((data as Comment[]) ?? []))
+      .finally(() => setLoading(false));
+  }, [eventId]);
+
+  function handlePosted(comment: Comment) {
+    setComments((prev) => [...prev, comment]);
+    setReplyTo(null);
+    onCommentCountChange?.(1);
+  }
+
+  function handleDeleted(id: string) {
+    setComments((prev) => prev.filter((c) => c.id !== id));
+    onCommentCountChange?.(-1);
+  }
+
+  function handleReacted(commentId: string, emoji: string, added: boolean) {
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id !== commentId) return c;
+        const reactions = added
+          ? [...c.comment_reactions, { comment_id: commentId, user_id: session.user.id, emoji }]
+          : c.comment_reactions.filter(
+              (r) => !(r.user_id === session.user.id && r.emoji === emoji),
+            );
+        return { ...c, comment_reactions: reactions };
+      }),
+    );
+  }
+
+  const topLevel = comments.filter((c) => !c.parent_id);
+  const replies = (parentId: string) => comments.filter((c) => c.parent_id === parentId);
+
+  return (
+    <div>
+      <h4 className="text-sm font-semibold mb-3">
+        Comments {comments.length > 0 && <span className="text-muted-foreground font-normal">({comments.length})</span>}
+      </h4>
+
+      {session && familyId && !replyTo && (
+        <div className="mb-4">
+          <CommentForm
+            eventId={eventId}
+            familyId={familyId}
+            session={session}
+            parentId={null}
+            enableVideoUpload={enableVideoUpload}
+            placeholder="Add a comment…"
+            onPosted={handlePosted}
+            onCancel={null}
+          />
+        </div>
+      )}
+      {!session && (
+        <p className="mb-3 text-xs text-muted-foreground italic">Sign in to comment.</p>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {topLevel.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">No comments yet. Be the first!</p>
+          )}
+          {topLevel.map((c) => (
+            <div key={c.id}>
+              <CommentBubble
+                comment={c}
+                session={session}
+                onDelete={() => handleDeleted(c.id)}
+                onReact={(emoji, added) => handleReacted(c.id, emoji, added)}
+                onReply={() => setReplyTo(replyTo?.id === c.id ? null : c)}
+                replyCount={replies(c.id).length}
+              />
+              {replies(c.id).map((r) => (
+                <div key={r.id} className="ml-6 mt-2">
+                  <CommentBubble
+                    comment={r}
+                    session={session}
+                    onDelete={() => handleDeleted(r.id)}
+                    onReact={(emoji, added) => handleReacted(r.id, emoji, added)}
+                    onReply={null}
+                    replyCount={0}
+                  />
+                </div>
+              ))}
+              {replyTo?.id === c.id && session && familyId && (
+                <div className="ml-6 mt-2">
+                  <CommentForm
+                    eventId={eventId}
+                    familyId={familyId}
+                    session={session}
+                    parentId={c.id}
+                    enableVideoUpload={enableVideoUpload}
+                    placeholder={`Reply to ${c.profiles?.full_name ?? "comment"}…`}
+                    onPosted={handlePosted}
+                    onCancel={() => setReplyTo(null)}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+function CommentBubble({
+  comment,
+  session,
+  onDelete,
+  onReact,
+  onReply,
+  replyCount,
+}: {
+  comment: Comment;
+  session: any;
+  onDelete: () => void;
+  onReact: (emoji: string, added: boolean) => void;
+  onReply: (() => void) | null;
+  replyCount: number;
+}) {
+  const [showEmojis, setShowEmojis] = useState(false);
+  const isOwn = session?.user?.id === comment.author_id;
+
+  const reactionGroups = EMOJIS.map((emoji) => {
+    const count = comment.comment_reactions.filter((r) => r.emoji === emoji).length;
+    const reacted = comment.comment_reactions.some(
+      (r) => r.emoji === emoji && r.user_id === session?.user?.id,
+    );
+    return { emoji, count, reacted };
+  }).filter((g) => g.count > 0);
+
+  async function handleEmoji(emoji: string) {
+    if (!session) return;
+    setShowEmojis(false);
+    try {
+      const added = await toggleReaction(comment.id, session.user.id, emoji);
+      onReact(emoji, added);
+    } catch { /* silent */ }
+  }
+
+  return (
+    <div className="rounded-lg border bg-background px-3 py-2 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-xs">
+          {comment.profiles?.full_name ?? "Family Member"}
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          {format(new Date(comment.created_at), "MMM d, h:mm a")}
+        </span>
+      </div>
+
+      {comment.image_url && (
+        <MediaPreview url={comment.image_url} className="mt-2 max-h-40 w-full rounded-md object-cover" />
+      )}
+      {comment.content && (
+        <p className="mt-1 text-sm whitespace-pre-wrap">{comment.content}</p>
+      )}
+
+      {/* Reactions bar */}
+      <div className="mt-2 flex flex-wrap items-center gap-1">
+        {reactionGroups.map(({ emoji, count, reacted }) => (
+          <button
+            key={emoji}
+            onClick={() => handleEmoji(emoji)}
+            className={`flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition ${
+              reacted ? "border-primary bg-primary/10" : "border-muted hover:border-primary/40"
+            }`}
+          >
+            {emoji} {count}
+          </button>
+        ))}
+
+        {/* Add reaction */}
+        <div className="relative">
+          <button
+            onClick={() => setShowEmojis((v) => !v)}
+            className="rounded-full border border-dashed px-1.5 py-0.5 text-xs text-muted-foreground hover:border-primary/40"
+          >
+            +
+          </button>
+          {showEmojis && (
+            <div className="absolute bottom-6 left-0 z-10 flex gap-1 rounded-lg border bg-background p-1 shadow-md">
+              {EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => handleEmoji(e)}
+                  className="rounded px-1 py-0.5 hover:bg-muted text-base"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {onReply && (
+          <button
+            onClick={onReply}
+            className="ml-1 text-[10px] text-muted-foreground hover:text-primary"
+          >
+            {replyCount > 0 ? `Reply (${replyCount})` : "Reply"}
+          </button>
+        )}
+
+        {isOwn && (
+          <button
+            onClick={async () => {
+              if (!confirm("Delete this comment?")) return;
+              await deleteComment(comment.id);
+              onDelete();
+            }}
+            className="ml-auto text-[10px] text-muted-foreground hover:text-destructive"
+          >
+            Delete
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommentForm({
+  eventId,
+  familyId,
+  session,
+  parentId,
+  enableVideoUpload,
+  placeholder,
+  onPosted,
+  onCancel,
+}: {
+  eventId: string;
+  familyId: string;
+  session: any;
+  parentId: string | null;
+  enableVideoUpload: boolean;
+  placeholder: string;
+  onPosted: (c: Comment) => void;
+  onCancel: (() => void) | null;
+}) {
+  const [content, setContent] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("video/") && !enableVideoUpload) {
+      setError("Video uploads require a subscription plan.");
+      e.target.value = "";
+      return;
+    }
+    const maxMB = file.type.startsWith("video/") ? 40 : 10;
+    if (file.size > maxMB * 1024 * 1024) {
+      setError(`File too large — max ${maxMB}MB for ${file.type.startsWith("video/") ? "videos" : "images"}.`);
+      e.target.value = "";
+      return;
+    }
+    setError("");
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  async function handleGenerate() {
+    if (!content.trim() && !imageFile) { setError("Add some text or a photo first"); return; }
+    setGenerating(true);
+    setError("");
+    try {
+      let uploadedUrl: string | null = null;
+      if (imageFile && !imageFile.type.startsWith("video/")) {
+        uploadedUrl = await uploadImage(imageFile, familyId);
+        setImagePreview(uploadedUrl);
+        setImageFile(null);
+      }
+      const { description } = await callEdgeFunction("generate-description", {
+        title: "Event comment",
+        content: content.trim() || null,
+        imageUrl: uploadedUrl,
+        eventId,
+        authorId: session.user.id,
+        familyId,
+      });
+      setContent(description);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!content.trim() && !imageFile && !imagePreview) { setError("Write something or attach a photo/video"); return; }
+    setSaving(true);
+    setError("");
+    try {
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile, familyId);
+      } else if (imagePreview?.startsWith("http")) {
+        imageUrl = imagePreview;
+      }
+      const comment = await createComment({
+        event_id: eventId,
+        author_id: session.user.id,
+        content: content.trim() || null,
+        image_url: imageUrl,
+        parent_id: parentId,
+      });
+      setContent("");
+      setImageFile(null);
+      setImagePreview("");
+      onPosted(comment as Comment);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      {/* Media upload */}
+      <label className="block border border-dashed rounded-lg px-3 py-2 text-center cursor-pointer hover:border-primary transition">
+        {imagePreview ? (
+          isVideoUrl(imagePreview) || imageFile?.type.startsWith("video/") ? (
+            <video src={imagePreview} className="max-h-24 mx-auto rounded pointer-events-none" />
+          ) : (
+            <img src={imagePreview} alt="" className="max-h-24 mx-auto rounded object-contain" />
+          )
+        ) : (
+          <span className="text-xs text-muted-foreground">{enableVideoUpload ? "📎 Attach photo or video (optional)" : "📎 Attach photo (optional)"}</span>
+        )}
+        <input type="file" accept={enableVideoUpload ? "image/*,video/*" : "image/*"} className="sr-only" onChange={handleFile} />
+      </label>
+      {imagePreview && (
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-destructive text-right"
+          onClick={() => { setImagePreview(""); setImageFile(null); }}
+        >
+          Remove
+        </button>
+      )}
+
+      <div className="flex items-start gap-2">
+        <Textarea
+          rows={2}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={placeholder}
+          className="text-sm resize-none"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+          }}
+        />
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={handleSubmit} disabled={saving}>
+          {saving && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+          Post
+        </Button>
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={generating}
+          className="ml-auto flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+        >
+          {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+          {generating ? "Generating…" : "✨ Generate with AI"}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── EventCard — going / pending / invited counts ───────────────────────────── */
 
 function EventCard({
   ev,
   invites,
+  commentCount,
   active,
   onSelect,
 }: {
   ev: FamilyEvent;
   invites: Invite[];
+  commentCount: number;
   active?: boolean;
   onSelect: () => void;
 }) {
@@ -371,6 +839,11 @@ function EventCard({
         {going === 0 && pending === 0 && invited === 0 && (
           <Badge variant="outline" className="text-muted-foreground">No invites yet</Badge>
         )}
+        {commentCount > 0 && (
+          <Badge variant="outline" className="text-muted-foreground ml-auto">
+            💬 {commentCount}
+          </Badge>
+        )}
       </div>
 
       {ev.description && (
@@ -387,19 +860,27 @@ function EventDetail({
   invites,
   canClose,
   canModify,
+  session,
+  familyId,
+  enableVideoUpload,
   onClose,
   onModify,
   onAddInvite,
   onUpdateStatus,
+  onCommentCountChange,
 }: {
   event: FamilyEvent;
   invites: Invite[];
   canClose: boolean;
   canModify: boolean;
+  session: any;
+  familyId: string | null;
+  enableVideoUpload: boolean;
   onClose: () => void;
   onModify: () => void;
   onAddInvite: (name: string, email: string | null) => Promise<void>;
   onUpdateStatus: (invId: string, status: string) => Promise<void>;
+  onCommentCountChange?: (eventId: string, delta: number) => void;
 }) {
   const [name, setName]   = useState("");
   const [email, setEmail] = useState("");
@@ -517,6 +998,17 @@ function EventDetail({
           </Button>
         </div>
       )}
+
+      {/* Comment Thread */}
+      <div className="mt-5 pt-5 border-t">
+        <CommentThread
+          eventId={event.id}
+          familyId={familyId}
+          session={session}
+          enableVideoUpload={enableVideoUpload}
+          onCommentCountChange={onCommentCountChange ? (delta) => onCommentCountChange(event.id, delta) : undefined}
+        />
+      </div>
     </div>
   );
 }
@@ -596,11 +1088,12 @@ function CreateEventForm({
   onSave,
 }: {
   onCancel: () => void;
-  onSave: (args: { title: string; description: string; location: string }) => Promise<void>;
+  onSave: (args: { title: string; description: string; location: string; visibility: "family" | "open" | "public" }) => Promise<void>;
 }) {
   const [title, setTitle]       = useState("New Event");
   const [description, setDesc]  = useState("");
   const [location, setLocation] = useState("");
+  const [visibility, setVisibility] = useState<"family" | "open" | "public">("family");
   const [loading, setLoading]   = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError]       = useState("");
@@ -626,7 +1119,7 @@ function CreateEventForm({
     if (!title.trim()) { setError("Title is required"); return; }
     setLoading(true);
     try {
-      await onSave({ title: title.trim(), description: description.trim(), location: location.trim() });
+      await onSave({ title: title.trim(), description: description.trim(), location: location.trim(), visibility });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -671,6 +1164,28 @@ function CreateEventForm({
         />
       </label>
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Visibility picker — compact chips, ADR-010 */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Who can see this event?</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: "family",  icon: "❤️", short: "to Family",   desc: "Visible to family members only" },
+            { value: "open",    icon: "👥", short: "All users",    desc: "Any registered user can read and RSVP" },
+            { value: "public",  icon: "🌐", short: "Public",       desc: "Anyone — shareable link, no login needed" },
+          ] as const).map(({ value, icon, short, desc }) => (
+            <button key={value} type="button" title={desc} onClick={() => setVisibility(value)}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                visibility === value
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}>
+              <span>{icon}</span><span>{short}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSave} disabled={loading}>
           {loading && <Loader2 className="h-4 w-4 animate-spin mr-1" />}

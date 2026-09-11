@@ -3,8 +3,8 @@ export default function SiteFooter() {
     <footer className="border-t bg-background">
       <div className="container py-10 grid gap-6 md:grid-cols-3">
         <div>
-          <a href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-gradient-to-br from-primary to-rose-400" />
+          <a href="/" className="flex items-center gap-1.5">
+            <img src="/logo.svg" alt="Family Vibes" className="h-7 w-7 rounded-md" />
             <span className="font-semibold">Family Vibes</span>
           </a>
           <p className="mt-3 text-sm text-muted-foreground max-w-sm">
@@ -16,8 +16,8 @@ export default function SiteFooter() {
           <h4 className="text-sm font-semibold">Features</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
-              <a href="/blogs" className="hover:underline">
-                Member blogs
+              <a href="/stories" className="hover:underline">
+                Stories
               </a>
             </li>
             <li>
@@ -40,7 +40,7 @@ export default function SiteFooter() {
         <div>
           <h4 className="text-sm font-semibold">Privacy</h4>
           <p className="mt-3 text-sm text-muted-foreground">
-            Invite-only access. Export your data anytime.
+            Invite-only access to your family.
           </p>
         </div>
       </div>
