@@ -16,7 +16,7 @@ export default function SiteFooter() {
           <h4 className="text-sm font-semibold">Features</h4>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
-              <a href="/blogs" className="hover:underline">
+              <a href="/stories" className="hover:underline">
                 Stories
               </a>
             </li>
@@ -40,7 +40,7 @@ export default function SiteFooter() {
         <div>
           <h4 className="text-sm font-semibold">Privacy</h4>
           <p className="mt-3 text-sm text-muted-foreground">
-            Invite-only access. Export your data anytime.
+            Invite-only access to your family.
           </p>
         </div>
       </div>

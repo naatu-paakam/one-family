@@ -29,19 +29,29 @@ const isDemo =
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 
-export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId, familyId }: {
-  limit?: number; offset?: number; hashtag?: string; authorId?: string; familyId?: string | null
+export type StoryVisibility = 'private' | 'family' | 'open' | 'public'
+export type EventVisibility  = 'family' | 'open' | 'public'
+export type FamilyVisibility = 'private' | 'open' | 'public'
+
+export async function fetchUpdates({ limit = 50, offset = 0, hashtag, authorId, familyId, visibility }: {
+  limit?: number; offset?: number; hashtag?: string; authorId?: string
+  familyId?: string | null
+  visibility?: StoryVisibility | StoryVisibility[]  // filter by visibility tier
 } = {}) {
   if (isDemo) return []
   let query = supabase
     .from('updates')
-    .select('*, profiles(full_name, avatar_url), events(id, title, description, started_at, closed_at, created_by, created_at)')
+    .select('*, profiles(full_name, avatar_url), events(id, title, description, started_at, closed_at, created_by, created_at), story_families(family_id)')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
   if (hashtag) query = query.contains('hashtags', [hashtag])
   if (authorId) query = query.eq('author_id', authorId)
-  if (familyId) query = query.eq('family_id', familyId)
+  if (familyId) query = query.eq('story_families.family_id', familyId)
+  if (visibility) {
+    const tiers = Array.isArray(visibility) ? visibility : [visibility]
+    query = query.in('visibility', tiers)
+  }
 
   const { data, error } = await query
   if (error) throw error
@@ -71,25 +81,58 @@ export async function fetchRecentUpdates(days = 7) {
   return data
 }
 
-export async function createUpdate(payload) {
-  const { data, error } = await supabase
+export async function createUpdate(payload: { familyId?: string | null; visibility?: StoryVisibility; [key: string]: any }) {
+  const { familyId, ...rest } = payload
+
+  // Generate UUID client-side so we can do a bare INSERT (no RETURNING clause).
+  // RETURNING triggers SELECT RLS — for visibility='family' this fails before story_families is linked.
+  const newId = crypto.randomUUID()
+
+  // Step 1: Bare INSERT — no .select(), no RETURNING, no RLS SELECT check
+  const { error: insertError } = await supabase
     .from('updates')
-    .insert(payload)
-    .select()
-    .single()
-  if (error) throw error
-  return data
+    .insert({ ...rest, id: newId })
+  if (insertError) throw insertError
+
+  // Step 2: Link to family via junction table (ADR-009) — MUST happen before SELECT
+  if (familyId && rest.visibility !== 'private') {
+    await supabase.rpc('publish_story_to_family', { p_story_id: newId, p_family_id: familyId })
+  }
+
+  // Step 3: Now SELECT is safe — story_families entry exists for 'family' visibility
+  const { data, error: fetchError } = await supabase
+    .from('updates')
+    .select('*, profiles(full_name, avatar_url), events(id, title, description, started_at, closed_at, created_by, created_at), story_families(family_id)')
+    .eq('id', newId)
+    .maybeSingle()
+  if (fetchError) throw fetchError
+  return data ?? { id: newId, ...rest }
 }
 
-export async function updateUpdate(id, payload) {
-  const { data, error } = await supabase
-    .from('updates')
-    .update({ ...payload, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+export async function setStoryVisibility(storyId: string, visibility: StoryVisibility) {
+  const { error } = await supabase.from('updates').update({ visibility }).eq('id', storyId)
   if (error) throw error
-  return data
+}
+
+export async function updateUpdate(id: string, payload: Record<string, any>) {
+  // Exclude client-side fields that don't exist on the updates table (ADR-009)
+  const { familyId, family_id, ...safePayload } = payload
+
+  const { error } = await supabase
+    .from('updates')
+    .update({ ...safePayload, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+
+  // Fetch the updated row separately — avoids "Cannot coerce to single JSON object"
+  // which occurs when visibility='private' changes the SELECT RLS evaluation context
+  const { data, error: fetchError } = await supabase
+    .from('updates')
+    .select('*, profiles(full_name, avatar_url), events(id, title, description, started_at, closed_at, created_by, created_at), story_families(family_id)')
+    .eq('id', id)
+    .maybeSingle()
+  if (fetchError) throw fetchError
+  return data ?? { id, ...safePayload }
 }
 
 export async function deleteUpdate(id) {
@@ -181,27 +224,50 @@ export async function uploadImage(file: File, familyId?: string | null) {
 
 export async function fetchActiveEvents(familyId?: string | null) {
   if (isDemo) return []
+  // family_id column removed (ADR-009) — filter via event_families junction table
   let query = supabase
     .from('events')
-    .select('*')
+    .select('*, event_families(family_id)')
     .is('closed_at', null)
     .order('started_at', { ascending: true })
-  if (familyId) query = query.eq('family_id', familyId)
+  if (familyId) query = query.eq('event_families.family_id', familyId)
   const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-export async function createEvent({ title, description, location = null, familyId = null }: {
-  title: string; description?: string; location?: string | null; familyId?: string | null
+export async function fetchAllEvents(familyId?: string | null) {
+  if (isDemo) return []
+  let query = supabase
+    .from('events')
+    .select('*, event_families(family_id)')
+    .order('started_at', { ascending: false })
+  if (familyId) query = query.eq('event_families.family_id', familyId)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createEvent({ title, description, location = null, familyId = null, visibility = 'family' }: {
+  title: string; description?: string; location?: string | null
+  familyId?: string | null; visibility?: EventVisibility
 }) {
+  const userId = (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('events')
-    .insert({ title, description, location, family_id: familyId, created_by: (await supabase.auth.getUser()).data.user?.id })
+    .insert({ title, description, location, created_by: userId, visibility })
     .select()
     .single()
   if (error) throw error
+  if (familyId && data?.id) {
+    await supabase.rpc('share_event_to_family', { p_event_id: data.id, p_family_id: familyId })
+  }
   return data
+}
+
+export async function setEventVisibility(eventId: string, visibility: EventVisibility) {
+  const { error } = await supabase.from('events').update({ visibility }).eq('id', eventId)
+  if (error) throw error
 }
 
 export async function closeEvent(id) {
@@ -274,7 +340,7 @@ export async function fetchMyFamilies() {
   if (!user) return []
   const { data, error } = await supabase
     .from('family_members')
-    .select('role, families(id, name, invite_code, created_by, created_at, enable_video_upload)')
+    .select('role, families(id, name, invite_code, created_by, created_at, enable_video_upload, bio, visibility)')
     .eq('user_id', user.id)
     .order('joined_at', { ascending: true })
   if (error) throw error
@@ -293,7 +359,62 @@ export async function joinFamilyByCode(inviteCode: string) {
   return data as { id: string; name: string; invite_code: string; created_by: string; created_at: string }
 }
 
-// ── Family Trees ──────────────────────────────────────────────────────────────
+// ── Family Tree Nodes (ADR-012: flat rows replace JSONB blob) ─────────────────
+
+export type FlatTreeNode = {
+  id: string
+  family_id: string
+  parent_id: string | null
+  name: string
+  born: string | null
+  avatar: string | null
+  user_id: string | null
+  partner_name: string | null
+  partner_born: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchFamilyTreeNodes(familyId: string): Promise<FlatTreeNode[]> {
+  if (isDemo) return []
+  const { data, error } = await supabase
+    .from('family_tree_nodes')
+    .select('*')
+    .eq('family_id', familyId)
+    .order('sort_order', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function upsertTreeNode(node: Partial<FlatTreeNode> & { id: string; family_id: string; name: string }) {
+  const { data, error } = await supabase
+    .from('family_tree_nodes')
+    .upsert({ ...node, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .select()
+    .single()
+  if (error) throw error
+  return data as FlatTreeNode
+}
+
+export async function deleteTreeNode(nodeId: string) {
+  // Cascades to children via FK on delete cascade
+  const { error } = await supabase.from('family_tree_nodes').delete().eq('id', nodeId)
+  if (error) throw error
+}
+
+export async function updateTreeNodeParent(nodeId: string, newParentId: string | null, newSortOrder: number) {
+  const { error } = await supabase
+    .from('family_tree_nodes')
+    .update({ parent_id: newParentId, sort_order: newSortOrder, updated_at: new Date().toISOString() })
+    .eq('id', nodeId)
+  if (error) throw error
+}
+
+// ── Legacy tree functions (kept for backward compat until family_trees is dropped) ──
 
 export async function fetchFamilyTree(familyId: string) {
   if (isDemo) return null
@@ -358,7 +479,6 @@ export async function fetchComments(eventId: string) {
 export async function createComment(payload: {
   event_id: string
   author_id: string
-  family_id: string
   content: string | null
   image_url: string | null
   parent_id: string | null
@@ -374,6 +494,110 @@ export async function createComment(payload: {
 
 export async function deleteComment(id: string) {
   const { error } = await supabase.from('comments').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Family Members list ───────────────────────────────────────────────────────
+
+export async function fetchFamilyMembers(familyId: string) {
+  if (isDemo) return []
+  const { data, error } = await supabase
+    .from('family_members')
+    .select('id, user_id, role, joined_at, profiles(id, full_name, avatar_url)')
+    .eq('family_id', familyId)
+    .order('joined_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+// ── Invitations ───────────────────────────────────────────────────────────────
+
+export async function generateFamilyInvitation(familyId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('generate_family_invitation', { p_family_id: familyId })
+  if (error) throw error
+  return data as string // returns the token UUID
+}
+
+export async function joinFamilyByToken(token: string): Promise<string> {
+  const { data, error } = await supabase.rpc('join_family_by_token', { p_token: token })
+  if (error) throw error
+  return data as string // returns family_id
+}
+
+export async function rotateInviteCode(familyId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('rotate_invite_code', { p_family_id: familyId })
+  if (error) throw error
+  return data as string // returns new invite code
+}
+
+export async function fetchFamilyInvitations(familyId: string) {
+  if (isDemo) return []
+  const { data, error } = await supabase
+    .from('family_invitations')
+    .select('id, token, expires_at, accepted_at, created_at, profiles(full_name)')
+    .eq('family_id', familyId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function revokeFamilyInvitation(invitationId: string) {
+  const { error } = await supabase.from('family_invitations').delete().eq('id', invitationId)
+  if (error) throw error
+}
+
+// ── Family bio ────────────────────────────────────────────────────────────────
+
+export async function updateFamilyBio(familyId: string, bio: string) {
+  const { error } = await supabase.rpc('update_family_bio', { p_family_id: familyId, p_bio: bio })
+  if (error) throw error
+}
+
+export async function updateFamilyVisibility(familyId: string, visibility: FamilyVisibility) {
+  const { error } = await supabase.rpc('update_family_visibility', { p_family_id: familyId, p_visibility: visibility })
+  if (error) throw error
+}
+
+// ── Portal admin queries ──────────────────────────────────────────────────────
+
+// Portal admin RPCs — all use security-definer functions that bypass RLS (ADR-002)
+
+export async function fetchAllFamiliesForPortal() {
+  if (isDemo) return []
+  const { data, error } = await supabase.rpc('portal_fetch_families')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchAllProfiles() {
+  if (isDemo) return []
+  const { data, error } = await supabase.rpc('portal_fetch_profiles')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function promoteToPortalAdmin(userId: string) {
+  const { error } = await supabase.rpc('portal_promote_admin', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function demotePortalAdmin(userId: string) {
+  const { error } = await supabase.rpc('portal_demote_admin', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function deleteFamily(familyId: string) {
+  const { error } = await supabase.rpc('portal_delete_family', { p_family_id: familyId })
+  if (error) throw error
+}
+
+export async function deleteUser(userId: string) {
+  const { error } = await supabase.rpc('portal_delete_user', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function setFamilyRole(userId: string, familyId: string, role: 'admin' | 'member') {
+  const { error } = await supabase.rpc('portal_set_family_role', { p_user_id: userId, p_family_id: familyId, p_role: role })
   if (error) throw error
 }
 

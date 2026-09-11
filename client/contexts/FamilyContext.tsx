@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { fetchMyFamilies } from '@/lib/supabase'
 import { useAuth } from './AuthContext'
 
+
 export interface Family {
   id: string
   name: string
@@ -10,12 +11,15 @@ export interface Family {
   created_at: string
   role: 'admin' | 'member'
   enable_video_upload?: boolean
+  bio?: string | null                          // ADR-003
+  visibility?: 'private' | 'open' | 'public'  // ADR-010
 }
 
 interface FamilyContextValue {
   families: Family[]
   activeFamilyId: string | null
   activeFamily: Family | null
+  isFamilyAdmin: boolean       // ADR-005 — true if role='admin' OR isPortalAdmin
   setActiveFamilyId: (id: string) => void
   reload: () => Promise<void>
   loading: boolean
@@ -25,7 +29,7 @@ interface FamilyContextValue {
 const FamilyContext = createContext<FamilyContextValue | null>(null)
 
 export function FamilyProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useAuth()
+  const { session, isPortalAdmin } = useAuth()
   const [families, setFamilies] = useState<Family[]>([])
   const [activeFamilyId, setActiveFamilyIdState] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -57,9 +61,11 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
 
   const activeFamily = families.find(f => f.id === activeFamilyId) ?? null
   const enableVideoUpload = activeFamily?.enable_video_upload ?? false
+  // ADR-005: isFamilyAdmin is true if user is admin of active family OR is portal admin
+  const isFamilyAdmin = activeFamily?.role === 'admin' || isPortalAdmin
 
   return (
-    <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, setActiveFamilyId, reload: load, loading, enableVideoUpload }}>
+    <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, isFamilyAdmin, setActiveFamilyId, reload: load, loading, enableVideoUpload }}>
       {children}
     </FamilyContext.Provider>
   )

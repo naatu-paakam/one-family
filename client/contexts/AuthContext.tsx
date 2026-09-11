@@ -10,21 +10,28 @@ interface Profile {
   id: string
   full_name: string | null
   avatar_url: string | null
-  is_admin: boolean
+  is_portal_admin: boolean  // renamed from is_admin (ADR-002)
   created_at: string
+}
+
+interface AuthModalOptions {
+  defaultTab?: 'signin' | 'signup'
+  redirectTo?: string   // navigate here after successful sign-in
 }
 
 interface AuthContextValue {
   session: Session | null
   profile: Profile | null
   loading: boolean
-  isAdmin: boolean
+  isPortalAdmin: boolean
   authModalOpen: boolean
-  openAuthModal: () => void
+  authModalOptions: AuthModalOptions
+  openAuthModal: (opts?: AuthModalOptions) => void
   closeAuthModal: () => void
   signInWithGoogle: () => Promise<void>
   signInWithFacebook: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<void>
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -35,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authModalOptions, setAuthModalOptions] = useState<AuthModalOptions>({})
 
   useEffect(() => {
     if (isDemo) { setLoading(false); return }
@@ -98,14 +106,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+  async function signUpWithEmail(email: string, password: string, fullName: string) {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    })
+    if (error) throw error
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
 
-  const isAdmin = profile?.is_admin === true
+  const isPortalAdmin = profile?.is_portal_admin === true
+
+  function openAuthModal(opts: AuthModalOptions = {}) {
+    setAuthModalOptions(opts)
+    setAuthModalOpen(true)
+  }
+
+  function closeAuthModal() {
+    setAuthModalOpen(false)
+    setAuthModalOptions({})
+  }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, isAdmin, authModalOpen, openAuthModal: () => setAuthModalOpen(true), closeAuthModal: () => setAuthModalOpen(false), signInWithGoogle, signInWithFacebook, signInWithEmail, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPortalAdmin, authModalOpen, authModalOptions, openAuthModal, closeAuthModal, signInWithGoogle, signInWithFacebook, signInWithEmail, signUpWithEmail, signOut }}>
       {children}
     </AuthContext.Provider>
   )

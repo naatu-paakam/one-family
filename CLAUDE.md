@@ -6,7 +6,9 @@ This is the **active** app. The old Vite-only app lives at `../one-family-deprec
 
 ```
 client/           # React 18 + TypeScript SPA (Vite)
-  pages/          # Index, Blogs (Stories), Events, FamilyTree
+  pages/          # Index, Blogs (Stories route: /stories), Events, FamilyTree,
+                  # WhyFamilyVibes, JoinFamily, FamilySettings, Portal,
+                  # PublicEvent, PublicStory, NotFound
   components/
     layout/       # SiteHeader (auth + events), SiteFooter
     ui/           # 30+ shadcn/Radix UI components
@@ -22,13 +24,17 @@ public/           # Static assets — Vite publicDir (not client/public/)
   logo.svg        # Header/footer icon
   favicon.svg     # Browser tab icon
 netlify.toml      # Build config + SPA catch-all redirect
+e2e/              # Playwright test specs (8 files, ~100 tests)
+docs/
+  adr/            # Architecture Decision Records (ADR-001 to ADR-012)
+  releases/       # Release notes: MVP.md (current milestone), R1.md, POC.md
 ```
 
 ## Dev server
 
 ```bash
 npm install
-npm run dev       # http://localhost:8080
+npm run dev       # http://localhost:5176
 npm run build     # production build → dist/spa/
 npm run typecheck # TypeScript validation
 ```
@@ -55,10 +61,24 @@ The app runs in **demo mode** (no real DB calls) when these are absent.
 
 ## After every development change — run Playwright tests
 
+```bash
+npx playwright test            # run all 8 spec files
+npx playwright test e2e/sanity.spec.ts    # smoke — core pages load
+npx playwright test e2e/auth.spec.ts      # sign-in, sign-out, TC-AUTH-*
+npx playwright test e2e/mvp.spec.ts       # MVP feature acceptance
+npx playwright test e2e/portal.spec.ts    # portal admin routes + gates
+npx playwright test e2e/regression.spec.ts# regression guard
+npx playwright test e2e/tree.spec.ts      # family tree CRUD
+npx playwright test e2e/visibility.spec.ts# ADR-010 visibility tiers
+npx playwright test e2e/e2e-full.spec.ts  # full user journeys
+```
+
+> `RESEND_API_KEY` must be set for TC-AUTH-04 (email invite test); it is not required for the rest of the suite.
+
 Sign in with:
 - Email: `test@naatupakam.family`
-- Password: `Test123!`
-- URL: `http://localhost:8080`
+- Password: see `.notes` (gitignored — never commit test credentials)
+- URL: `http://localhost:5176`
 
 ### Checklist
 
@@ -92,7 +112,7 @@ Sign in with:
    - Active event pills appear below header when events exist for the active family
    - Sign out clears session and removes family badge
 
-5. **Stories page** (`/blogs`)
+5. **Stories page** (`/stories`)
    - Posts load from Supabase scoped to active family (All / Published / Drafts tabs)
    - Clicking a card shows detail in right panel
    - Event badge (🎉 EventName) shown on event-linked posts
@@ -124,6 +144,20 @@ Sign in with:
 - Google OAuth cannot be automated — test manually
 - AI Edge Functions require `ANTHROPIC_API_KEY` set via `supabase secrets set`
 - Test families used: **NaatuPaakam** (has data), **Sharma Side** (tree only), **Empty Test Family** (blank)
+- `RESEND_API_KEY` is only needed for TC-AUTH-04; the app runs without it
+
+## Pre-push security gate (mandatory)
+
+Before every `git push`, run this grep. It must return **zero real secrets**:
+
+```bash
+grep -rn "eyJ\|re_[A-Za-z0-9]\|sk_live" \
+  client/ supabase/ public/ \
+  --include="*.ts" --include="*.tsx" --include="*.sql" --include="*.json" \
+  --exclude-dir=node_modules
+```
+
+If any match is a real credential (not a test fixture or placeholder), **do not push**. Remove the secret, rotate it, and update `.notes` or Supabase secrets instead.
 
 ## Deploy to Netlify
 
@@ -161,5 +195,52 @@ supabase functions deploy generate-summary
 
 ```
 main                  ← production (auto-deploys to Netlify)
-feat/<name>           ← feature branches → PR → merge to main
+feat/<name>           ← feature branches
 ```
+
+> **Current stage: MVP Release 1b — shipped locally; not yet pushed to Netlify.**  
+> See `docs/releases/MVP.md` for the current milestone checklist and Definition of Done.  
+> Before merging `feat/*` → `main`, all Playwright tests must pass and the pre-push security gate must return zero hits.
+
+---
+
+## Architecture Decision Records (ADRs)
+
+ADRs live in `docs/adr/`. **Read the relevant ADR before implementing any feature that touches roles, auth, families, or invites.** All ADRs are binding — a change that violates one must first update the ADR with explicit sign-off.
+
+| ADR | Scope | Read when… |
+|---|---|---|
+| [ADR-001](docs/adr/ADR-001-role-model.md) | Three-tier role model | Any auth or access-control work |
+| [ADR-002](docs/adr/ADR-002-portal-admin.md) | Portal admin (`/portal`, `is_portal_admin`) | Touching `profiles.is_admin`, portal route, or platform-level admin UI |
+| [ADR-003](docs/adr/ADR-003-per-family-roles.md) | Per-family role enforcement | Any feature that shows/hides UI based on family role |
+| [ADR-004](docs/adr/ADR-004-invite-system.md) | Invite system | Invite links, join flow, `family_invitations` table |
+| [ADR-005](docs/adr/ADR-005-role-gate-conventions.md) | Role gate conventions | **Every feature** — this is the coding standard |
+| [ADR-006](docs/adr/ADR-006-multi-family-membership.md) | Multi-family model | Family switching, leaving a family, empty-family state |
+| [ADR-007](docs/adr/ADR-007-templates.md) | Template system | Story templates, event templates, magazine layout config |
+| [ADR-008](docs/adr/ADR-008-identifier-policy.md) | UUID identifier policy | **Every** feature — no name/email/title as FK, filter, or URL param |
+| [ADR-009](docs/adr/ADR-009-multi-family-story-publishing.md) | Multi-family content publishing | Stories, events, comments — junction tables, creator-controls-assignment rule |
+| [ADR-010](docs/adr/ADR-010-visibility-tiers.md) | Visibility tiers (family/open/public) | Any feature touching event/story/family visibility, public routes, comments, RSVP |
+| [ADR-012](docs/adr/ADR-012-family-tree-scale.md) | Family tree scale | Any tree feature — storage, rendering, search, save logic |
+
+### Pre-push checklist — role-related changes
+
+Before pushing any commit that touches auth, roles, families, invites, or access-controlled UI:
+
+- [ ] **ADR read** — relevant ADR(s) reviewed for this change
+- [ ] **Role gate uses helper** — `isFamilyAdmin` or `isPortalAdmin` from context, not raw field comparison
+- [ ] **`[ROLE: ...]` tag** — every gated UI element has the inline comment (grep: `grep -r '\[ROLE:'`)
+- [ ] **RLS policy** — new DB-touching feature has a corresponding RLS policy (in a migration, not edited inline)
+- [ ] **Both layers** — client gate (UX) AND RLS (security) both present
+- [ ] **Test coverage** — TC- test for the gated element covering allowed + denied roles
+- [ ] **`family_id` filter** — every new Supabase query that returns family-scoped data includes `family_id` filter
+- [ ] **Template picker is optional** — members can always start blank; never force a template (ADR-007)
+- [ ] **Family bio gate** — edit affordance on bio is wrapped in `{isFamilyAdmin && ...}`; bio section hidden entirely when null (ADR-003)
+- [ ] **Invite link path** — individual invite is copy-paste token only; no email sending code (ADR-004)
+- [ ] **UUID identifiers** — no name, email, or title used as FK, filter key, or URL param for any entity; run audit grep: `grep -rn "\.eq('name'\|\.eq(\"name\"\|\.eq('email'\|\.eq('title'\|\.eq('full_name'" client/lib/ supabase/ --include="*.ts" --include="*.sql"` → must return 0 hits (ADR-008)
+- [ ] **Junction tables** — story and event queries join through `story_families` / `event_families`; no `.eq('family_id',...)` on `updates` or `events` tables (ADR-009)
+- [ ] **Creator controls family assignment** — no code path allows a family admin or portal admin to *add* a story/event to a family the creator did not choose; admins can only remove (ADR-009)
+- [ ] **Comment scope derived from parent** — no `comments.family_id` filter; comment visibility comes from parent story/event junction table join (ADR-009)
+- [ ] **Visibility tiers** — every new query on `events` or `updates` respects the `visibility` column; public routes work without session; open routes require `auth.uid() is not null` (ADR-010)
+- [ ] **Family tree + member list always private** — no code path exposes tree or member list to `open` or `public` tier (ADR-010 invariant)
+- [ ] **Tree uses flat rows** — no new code writes to `family_trees.tree_data` JSONB; all tree reads/writes go through `family_tree_nodes` table (ADR-012)
+- [ ] **Tree collapses by default** — nodes beyond depth 1 start collapsed; no full-tree expansion on load (ADR-012)

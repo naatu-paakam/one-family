@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2, Sparkles, Link2, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -49,6 +49,7 @@ type Update = {
   event_id: string | null;
   created_at: string;
   updated_at: string;
+  visibility: "private" | "family" | "open" | "public";
   profiles: { full_name: string | null; avatar_url: string | null } | null;
   events: { id: string; title: string; closed_at: string | null } | null;
 };
@@ -69,14 +70,50 @@ function parseTags(raw: string) {
     .filter(Boolean);
 }
 
-// Map Supabase posts to the tab categories:
-// "published" = posts with content, "draft" = posts without content
+// Map visibility to tab: private = draft, anything else = published (ADR-010)
 function tabOf(p: Update): "published" | "draft" {
-  return p.content?.trim() ? "published" : "draft";
+  return p.visibility === "private" ? "draft" : "published";
+}
+
+const VISIBILITY_LABELS: Record<string, { label: string; short: string; icon: string; description: string }> = {
+  private: { label: "Private",  short: "Private to you", icon: "🔒", description: "Only you can see this — saved as draft" },
+  family:  { label: "Family",   short: "to Family",      icon: "❤️", description: "Visible to family members only" },
+  open:    { label: "Open",     short: "All users",      icon: "👥", description: "Any registered user can read" },
+  public:  { label: "Public",   short: "Public",         icon: "🌐", description: "Anyone can read — no sign-in required" },
+};
+
+function CopyLinkButton({ storyId, dim, tooltip }: { storyId: string; dim?: boolean; tooltip?: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/stories/${storyId}`;
+  tooltip = tooltip ?? "Copy shareable link";
+
+  function handleCopy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={tooltip}
+      className={`shrink-0 rounded-full p-1.5 transition-colors ${
+        copied
+          ? "text-emerald-500 bg-emerald-50"
+          : dim
+          ? "text-muted-foreground/40 hover:text-muted-foreground hover:bg-slate-100"
+          : "text-muted-foreground hover:text-foreground hover:bg-slate-100"
+      }`}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+    </button>
+  );
 }
 
 export default function Blogs() {
-  const { session, isAdmin, openAuthModal } = useAuth();
+  const { session, openAuthModal } = useAuth();
+  const { isFamilyAdmin } = useFamily();
   const { activeEvents } = useEvent();
   const { activeFamilyId, enableVideoUpload } = useFamily();
 
@@ -123,7 +160,7 @@ export default function Blogs() {
   );
 
   const canEdit =
-    selected && (isAdmin || selected.author_id === session?.user?.id);
+    selected && (isFamilyAdmin || selected.author_id === session?.user?.id);
 
   const startCreate = () => setMode("create");
   const startEdit = () => setMode("edit");
@@ -162,7 +199,7 @@ export default function Blogs() {
                 </TabsList>
                 <div className="flex md:justify-end">
                   <Button
-                    onClick={session ? startCreate : openAuthModal}
+                    onClick={session ? startCreate : () => openAuthModal()}
                     className="h-10 w-10 rounded-full p-0"
                     aria-label="New Post"
                     title="New Post"
@@ -217,7 +254,8 @@ export default function Blogs() {
                 enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
-                  const created = await createUpdate(payload);
+                  const { familyId: fid, ...rest } = payload;
+                  const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
                   setPosts((prev) => [created, ...prev]);
                   setSelectedId(created.id);
                   setMode("none");
@@ -235,7 +273,9 @@ export default function Blogs() {
                 enableVideoUpload={enableVideoUpload}
                 onCancel={cancel}
                 onSave={async (payload) => {
-                  const updated = await updateUpdate(selected.id, payload);
+                  // Strip familyId — family association managed via story_families junction (ADR-009)
+                  const { familyId: _fid, ...rest } = payload;
+                  const updated = await updateUpdate(selected.id, rest);
                   setPosts((prev) =>
                     prev.map((p) => (p.id === selected.id ? { ...p, ...updated } : p)),
                   );
@@ -251,12 +291,30 @@ export default function Blogs() {
             </div>
           ) : selected ? (
             <div>
-              <div className="text-sm text-muted-foreground">Selected post</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm text-muted-foreground">Selected post</div>
+                {/* Copy link — all except private (private = author only, no sharing) */}
+                {selected.visibility !== "private" && (
+                  <CopyLinkButton
+                    storyId={selected.id}
+                    dim={selected.visibility === "family"}
+                    tooltip={
+                      selected.visibility === "family"
+                        ? "Copy link (family members need to sign in to view)"
+                        : selected.visibility === "open"
+                        ? "Copy link (registered users can view)"
+                        : "Copy public link"
+                    }
+                  />
+                )}
+              </div>
               <div className="mt-1 text-lg font-semibold">{selected.title}</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 By {selected.profiles?.full_name ?? "Family Member"} •{" "}
                 {fmtDate(selected.created_at)} •{" "}
-                <Badge variant="secondary">{tabOf(selected)}</Badge>
+                <Badge variant="secondary">
+                  {VISIBILITY_LABELS[selected.visibility]?.icon} {VISIBILITY_LABELS[selected.visibility]?.label ?? selected.visibility}
+                </Badge>
               </div>
               {selected.events && (
                 <Badge variant="outline" className="mt-2 text-amber-700 border-amber-300 bg-amber-50 text-xs">
@@ -321,8 +379,8 @@ function PostCard({
             By {author} • {fmtDate(post.created_at)}
           </div>
         </div>
-        <Badge variant={status === "published" ? "secondary" : "outline"}>
-          {status}
+        <Badge variant={post.visibility === "private" ? "outline" : "secondary"}>
+          {VISIBILITY_LABELS[post.visibility]?.icon} {VISIBILITY_LABELS[post.visibility]?.label ?? post.visibility}
         </Badge>
       </div>
       {post.events && (
@@ -353,6 +411,8 @@ type FormPayload = {
   hashtags: string[];
   author_id: string;
   event_id: string | null;
+  visibility: "private" | "family" | "open" | "public";
+  familyId?: string | null;
 };
 
 function PostForm({
@@ -375,6 +435,7 @@ function PostForm({
   onDelete?: () => Promise<void>;
 }) {
   const [title, setTitle] = useState(post?.title ?? "New Post");
+  const [visibility, setVisibility] = useState<"private" | "family" | "open" | "public">(post?.visibility ?? "private");
   // Multi-section content: existing posts split on double-newline, new posts start with one section
   const [sections, setSections] = useState<string[]>(
     post?.content ? post.content.split(/\n\n+/) : [""]
@@ -467,6 +528,8 @@ function PostForm({
         hashtags: parseTags(tags),
         author_id: authorId,
         event_id: selectedEventId || null,
+        visibility,
+        familyId,
       });
     } catch (e: any) {
       setError(e.message);
@@ -597,10 +660,37 @@ function PostForm({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
+      {/* Visibility picker — compact chips, ADR-010 */}
+      <div className="mt-3">
+        <p className="text-xs text-muted-foreground mb-1.5">Visibility</p>
+        <div className="flex flex-wrap gap-1.5">
+          {(["private", "family", "open", "public"] as const).map((v) => {
+            const meta = VISIBILITY_LABELS[v];
+            const selected = visibility === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                title={meta.description}
+                onClick={() => setVisibility(v)}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  selected
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <span>{meta.icon}</span>
+                <span>{meta.short}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSubmit} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          Save
+          {visibility === "private" ? "Save draft" : "Save"}
         </Button>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>

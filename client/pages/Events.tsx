@@ -267,7 +267,7 @@ export default function Events() {
                 </TabsList>
                 <div className="flex md:justify-end">
                   <Button
-                    onClick={session ? () => setMode("create") : openAuthModal}
+                    onClick={session ? () => setMode("create") : () => openAuthModal()}
                     className="h-10 w-10 rounded-full p-0"
                     aria-label="New Event"
                     title="New Event"
@@ -319,8 +319,8 @@ export default function Events() {
               <div className="text-sm text-muted-foreground">Create event</div>
               <CreateEventForm
                 onCancel={() => setMode("none")}
-                onSave={async ({ title, description, location }) => {
-                  await startEvent({ title, description, location });
+                onSave={async ({ title, description, location, visibility }) => {
+                  await startEvent({ title, description, location, visibility });
                   setMode("none");
                 }}
               />
@@ -706,7 +706,6 @@ function CommentForm({
       const comment = await createComment({
         event_id: eventId,
         author_id: session.user.id,
-        family_id: familyId,
         content: content.trim() || null,
         image_url: imageUrl,
         parent_id: parentId,
@@ -1089,11 +1088,12 @@ function CreateEventForm({
   onSave,
 }: {
   onCancel: () => void;
-  onSave: (args: { title: string; description: string; location: string }) => Promise<void>;
+  onSave: (args: { title: string; description: string; location: string; visibility: "family" | "open" | "public" }) => Promise<void>;
 }) {
   const [title, setTitle]       = useState("New Event");
   const [description, setDesc]  = useState("");
   const [location, setLocation] = useState("");
+  const [visibility, setVisibility] = useState<"family" | "open" | "public">("family");
   const [loading, setLoading]   = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError]       = useState("");
@@ -1119,7 +1119,7 @@ function CreateEventForm({
     if (!title.trim()) { setError("Title is required"); return; }
     setLoading(true);
     try {
-      await onSave({ title: title.trim(), description: description.trim(), location: location.trim() });
+      await onSave({ title: title.trim(), description: description.trim(), location: location.trim(), visibility });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1164,6 +1164,28 @@ function CreateEventForm({
         />
       </label>
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Visibility picker — compact chips, ADR-010 */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Who can see this event?</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: "family",  icon: "❤️", short: "to Family",   desc: "Visible to family members only" },
+            { value: "open",    icon: "👥", short: "All users",    desc: "Any registered user can read and RSVP" },
+            { value: "public",  icon: "🌐", short: "Public",       desc: "Anyone — shareable link, no login needed" },
+          ] as const).map(({ value, icon, short, desc }) => (
+            <button key={value} type="button" title={desc} onClick={() => setVisibility(value)}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                visibility === value
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}>
+              <span>{icon}</span><span>{short}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSave} disabled={loading}>
           {loading && <Loader2 className="h-4 w-4 animate-spin mr-1" />}

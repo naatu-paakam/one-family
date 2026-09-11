@@ -184,7 +184,7 @@ Always open a PR against `main`. Netlify previews are generated for each PR auto
 | Field | Value |
 |---|---|
 | Email | `test@naatupakam.family` |
-| Password | `Test123!` |
+| Password | see `.notes` (gitignored) |
 | Local URL | `http://localhost:8080` |
 
 ## License
