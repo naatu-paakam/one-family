@@ -56,11 +56,15 @@ async function globalTeardown() {
   // ── 2. Stories ──────────────────────────────────────────────────────────────
   await del("updates", "id=eq.00000000-0000-0000-5eed-000000000008", jwt);
   await del("updates", "id=eq.00000000-0000-0000-5eed-000000000009", jwt);
-  // Also clean leftover VIS-TEST and TC-VIS stories created during tests
-  await del("updates", "title=like.*%5BSEED%5D*",    jwt);  // [SEED] prefix
-  await del("updates", "title=like.TC-VIS*",          jwt);
-  await del("updates", "title=like.VIS-TEST*",        jwt);
-  await del("updates", "title=like.bare+private+test", jwt);
+  await del("updates", "id=eq.00000000-0000-0000-5eed-000000000011", jwt);
+  // Clean all test-generated stories by prefix or default title
+  await del("updates", "title=like.*%5BSEED%5D*",       jwt);  // [SEED] prefix
+  await del("updates", "title=like.TC-VIS*",             jwt);
+  await del("updates", "title=like.VIS-TEST*",           jwt);
+  await del("updates", "title=like.TC-SCOM*",            jwt);
+  await del("updates", "title=like.bare+private+test",   jwt);
+  // "New Post" is the app default title — any created by the test user should be removed
+  await del("updates", `title=eq.New+Post&author_id=eq.${userId}`, jwt);
   console.log("[global-teardown] ✓ Deleted stories");
 
   // ── 3. Events ───────────────────────────────────────────────────────────────

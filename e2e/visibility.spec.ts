@@ -231,7 +231,9 @@ test("TC-VIS-SAVE-01 Saving a new story with 'Private to you' visibility succeed
   await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
   // Fill required title
   // Title input — find by looking for a text input after "Title" label
-  // Default title "New Post" is pre-filled — no fill needed
+  // Use TC-prefixed title so teardown cleans it up
+  const titleInput01 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  await titleInput01.fill("TC-VIS-SAVE-01-private");
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.waitForTimeout(1500);
 
@@ -250,7 +252,9 @@ test("TC-VIS-SAVE-02 Saving a new story with Family visibility succeeds (was bro
   await page.getByRole("button", { name: "❤️ Family", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Save$/ })).toBeVisible({ timeout: 2000 });
 
-  // Default title "New Post" is pre-filled
+  // Use TC-prefixed title so teardown cleans it up
+  const titleInput02 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  await titleInput02.fill("TC-VIS-SAVE-02-family");
   await page.getByRole("button", { name: /^Save$/ }).click();
   await page.waitForTimeout(1500);
 
@@ -267,7 +271,9 @@ test("TC-VIS-SAVE-03 Saving a new story with 'All users' (open) visibility succe
   await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 5000 });
 
   await page.getByText("All users").click();
-  // Default title "New Post" is pre-filled
+  // Use TC-prefixed title so teardown cleans it up
+  const titleInput03 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  await titleInput03.fill("TC-VIS-SAVE-03-open");
   await page.getByRole("button", { name: /^Save$/ }).click();
   await page.waitForTimeout(1500);
 
