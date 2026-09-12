@@ -437,6 +437,61 @@ test("TC-TREE-B04 Flagged This-is-me node remains visible after navigating away 
   await expect(meBadge.first()).toBeVisible({ timeout: 5000 });
 });
 
+// ── BUG-005: Multiple root nodes — no member silently hidden ─────────────────
+// Regression for buildTree overwriting root when >1 node has parent_id=null,
+// causing an entire subtree to go invisible.
+
+test("TC-TREE-B05 All members visible in canvas — rendered count equals subtitle count", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B05: No tree — skipping"); return; }
+
+  // Parse member count from subtitle (e.g. "NaatuPaakam · 7 members · Click a person to edit.")
+  const subtitle = page.locator("p, span").filter({ hasText: /\d+\s+member/ }).first();
+  const subtitleText = await subtitle.innerText({ timeout: 8000 }).catch(() => "");
+  const match = subtitleText.match(/(\d+)\s+member/);
+  if (!match) { console.log("TC-TREE-B05: Could not parse member count — skipping"); return; }
+  const expectedCount = parseInt(match[1], 10);
+
+  // Expand all branches so every node is in the DOM
+  const expandBtn = page.getByTitle("Expand all branches");
+  if (await expandBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await expandBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  // Count rendered node cards — must equal the DB count reported in subtitle
+  const renderedCount = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+  expect(renderedCount).toBe(expectedCount);
+});
+
+test("TC-TREE-B05b Seed tree — all 7 seed nodes are individually visible by name", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B05b: No tree — skipping"); return; }
+
+  // Expand all
+  const expandBtn = page.getByTitle("Expand all branches");
+  if (await expandBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await expandBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  // All seed node names must be visible (global-setup injects them for NaatuPaakam)
+  const seedNames = [
+    "Seed Grandparent",
+    "Seed Parent One",
+    "Seed Parent Two",
+    "Seed Sibling",
+    "Seed Child One",
+    "Seed Child Two",
+    "Seed Grandchild",
+  ];
+  for (const name of seedNames) {
+    await expect(page.getByText(name).first()).toBeVisible({ timeout: 5000 });
+  }
+});
+
 // ── Scroll: wide tree is horizontally scrollable ──────────────────────────────
 
 test("TC-TREE-S01 Horizontal scroll container exists and allows overflow scroll", async ({ page }) => {
