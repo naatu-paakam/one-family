@@ -489,6 +489,7 @@ function PostForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   function updateSection(idx: number, val: string) {
     setSections((prev) => prev.map((s, i) => i === idx ? val : s));
@@ -749,16 +750,23 @@ function PostForm({
         </Button>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
-      {onDelete && (
+      {onDelete && !showDeleteConfirm && (
         <Button
           variant="destructive"
           className="w-full mt-1"
-          onClick={async () => {
-            if (confirm("Delete this post?")) await onDelete();
-          }}
+          onClick={() => setShowDeleteConfirm(true)}
         >
           Delete Post
         </Button>
+      )}
+      {onDelete && showDeleteConfirm && (
+        <div className="mt-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <p className="text-red-800 font-medium mb-2">Delete this post? This cannot be undone.</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" onClick={onDelete} disabled={saving}>Delete</Button>
+            <Button size="sm" variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+          </div>
+        </div>
       )}
     </div>
   );

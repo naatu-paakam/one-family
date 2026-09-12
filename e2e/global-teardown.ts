@@ -1,5 +1,12 @@
 /**
- * Playwright globalTeardown — cleans up all seed test data after the suite.
+ * Playwright globalTeardown — deletes the Test Family created in globalSetup.
+ * Cascade foreign keys handle all child rows automatically:
+ *   family_members, family_tree_nodes, story_families, event_families,
+ *   stories (updates), events, comments, invites — all gone in one delete.
+ *
+ * Stories with visibility='open'/'public' are NOT in story_families so they
+ * are cleaned up by author_id filter separately.
+ *
  * Uses raw HTTP (fetch) to avoid Supabase SDK ESM/CJS conflicts.
  */
 
@@ -7,6 +14,9 @@ const SUPABASE_URL  = process.env.VITE_SUPABASE_URL  ?? "https://tslvjovdqiaxedr
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY!;
 const EMAIL    = "test@naatupakam.family";
 const PASSWORD = "Test123!";
+
+const TEST_FAMILY_ID   = "00000000-0000-0000-test-000000000001";
+const TEST_FAMILY_B_ID = "00000000-0000-0000-test-000000000002";
 
 async function del(table: string, filter: string, jwt: string) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
@@ -22,6 +32,23 @@ async function del(table: string, filter: string, jwt: string) {
   }
 }
 
+async function rpc(fn: string, args: any, jwt: string) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${jwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    console.warn(`[global-teardown] rpc/${fn} → ${r.status}: ${txt.slice(0,80)}`);
+  }
+  return r;
+}
+
 async function globalTeardown() {
   // Sign in
   const authResp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -30,47 +57,27 @@ async function globalTeardown() {
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   if (!authResp.ok) { console.warn("[global-teardown] auth failed — skipping cleanup"); return; }
-  const { access_token } = await authResp.json() as { access_token: string };
-  const jwt = access_token;
+  const { access_token, user } = await authResp.json() as { access_token: string; user: { id: string } };
+  const jwt    = access_token;
+  const userId = user.id;
 
-  console.log("[global-teardown] Cleaning up seed test data…");
+  console.log("[global-teardown] Cleaning up Test Family and seed data…");
 
-  // ── 1. Tree nodes — delete leaves first, then parents, then root ─────────────
-  const leafIds = [
-    "00000000-0000-0000-5eed-000000000004",
-    "00000000-0000-0000-5eed-000000000005",
-    "00000000-0000-0000-5eed-000000000006",
-    "00000000-0000-0000-5eed-000000000007",
-  ];
-  const parentIds = [
-    "00000000-0000-0000-5eed-000000000002",
-    "00000000-0000-0000-5eed-000000000003",
-  ];
-  const rootId = "00000000-0000-0000-5eed-000000000001";
+  // ── 1. Delete Test Families via portal RPC — cascade removes all child rows ──
+  // portal_delete_family is security-definer and handles FK cascade correctly
+  await rpc("portal_delete_family", { p_family_id: TEST_FAMILY_ID },   jwt);
+  await rpc("portal_delete_family", { p_family_id: TEST_FAMILY_B_ID }, jwt);
+  console.log("[global-teardown] ✓ Deleted Test Families A & B (cascade)");
 
-  for (const id of [...leafIds, ...parentIds, rootId]) {
-    await del("family_tree_nodes", `id=eq.${id}`, jwt);
-  }
-  console.log("[global-teardown] ✓ Deleted tree nodes");
-
-  // ── 2. Stories ──────────────────────────────────────────────────────────────
-  await del("updates", "id=eq.00000000-0000-0000-5eed-000000000008", jwt);
-  await del("updates", "id=eq.00000000-0000-0000-5eed-000000000009", jwt);
-  await del("updates", "id=eq.00000000-0000-0000-5eed-000000000011", jwt);
-  // Clean all test-generated stories by prefix or default title
-  await del("updates", "title=like.*%5BSEED%5D*",       jwt);  // [SEED] prefix
-  await del("updates", "title=like.TC-VIS*",             jwt);
-  await del("updates", "title=like.VIS-TEST*",           jwt);
-  await del("updates", "title=like.TC-SCOM*",            jwt);
-  await del("updates", "title=like.bare+private+test",   jwt);
-  // "New Post" is the app default title — any created by the test user should be removed
-  await del("updates", `title=eq.New+Post&author_id=eq.${userId}`, jwt);
-  console.log("[global-teardown] ✓ Deleted stories");
-
-  // ── 3. Events ───────────────────────────────────────────────────────────────
-  await del("events", "id=eq.00000000-0000-0000-5eed-000000000010", jwt);
-  await del("events", "title=like.*%5BSEED%5D*", jwt);
-  console.log("[global-teardown] ✓ Deleted events");
+  // ── 2. Stories without a family link (open/public visibility) ────────────────
+  // These aren't in story_families so the family cascade doesn't catch them.
+  // Only delete by the test user — never touch other users' content.
+  await del("updates", `author_id=eq.${userId}&title=like.*%5BSEED%5D*`, jwt);
+  await del("updates", `author_id=eq.${userId}&title=like.TC-VIS*`,       jwt);
+  await del("updates", `author_id=eq.${userId}&title=like.VIS-TEST*`,     jwt);
+  await del("updates", `author_id=eq.${userId}&title=like.TC-SCOM*`,      jwt);
+  await del("updates", `author_id=eq.${userId}&title=eq.New+Post`,        jwt);
+  console.log("[global-teardown] ✓ Deleted orphan test stories");
 
   console.log("[global-teardown] ✓ Teardown complete");
 }

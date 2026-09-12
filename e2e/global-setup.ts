@@ -1,5 +1,8 @@
 /**
- * Playwright globalSetup — creates test data before the suite runs.
+ * Playwright globalSetup — creates a dedicated Test Family and seeds data before the suite.
+ * All seed data lives under TEST_FAMILY_ID so teardown can cascade-delete everything
+ * in one go without touching real production families (NaatuPaakam etc.).
+ *
  * Uses raw HTTP (fetch) to avoid Supabase SDK ESM/CJS conflicts in Node.js globalSetup.
  */
 
@@ -8,10 +11,11 @@ const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY!;
 const EMAIL    = "test@naatupakam.family";
 const PASSWORD = "Test123!";
 
-// NaatuPaakam family
-const FAMILY_ID = "842eda43-7cc9-4b32-bee3-f2aaa72d4d4b";
+// Deterministic Test Families — all test seed data lives here (never in NaatuPaakam)
+export const TEST_FAMILY_ID   = "00000000-0000-0000-test-000000000001"; // primary (test user = admin)
+export const TEST_FAMILY_B_ID = "00000000-0000-0000-test-000000000002"; // secondary (for cross-family visibility)
 
-// Deterministic seed IDs
+// Deterministic seed IDs — all namespaced under 5eed prefix
 export const SEED_ROOT_ID          = "00000000-0000-0000-5eed-000000000001";
 export const SEED_STORY_FAM        = "00000000-0000-0000-5eed-000000000008";
 export const SEED_STORY_OPEN       = "00000000-0000-0000-5eed-000000000009";
@@ -66,8 +70,28 @@ async function globalSetup() {
   const userId = user.id;
   console.log("[global-setup] Signed in as", EMAIL, "uid:", userId);
 
-  // ── 1. Family tree nodes — send one at a time (array requires identical keys) ──
-  const BASE_NODE = { family_id: FAMILY_ID, born: null as null|string, partner_name: null as null|string,
+  // ── 0. Test Families — upsert with deterministic IDs ─────────────────────────
+  // Family A: primary family, test user is admin, all seed data lives here
+  await rest("POST", "families", {
+    id: TEST_FAMILY_ID, name: "Test Family A", created_by: userId, visibility: "private",
+  }, jwt, "resolution=merge-duplicates,return=minimal");
+  await rest("POST", "family_members", {
+    family_id: TEST_FAMILY_ID, user_id: userId, role: "admin",
+  }, jwt, "resolution=merge-duplicates,return=minimal");
+
+  // Family B: secondary family, test user is also a member (for cross-family visibility tests)
+  // Seed data shared to Family B allows testing that 'family' content is per-family scoped
+  await rest("POST", "families", {
+    id: TEST_FAMILY_B_ID, name: "Test Family B", created_by: userId, visibility: "private",
+  }, jwt, "resolution=merge-duplicates,return=minimal");
+  await rest("POST", "family_members", {
+    family_id: TEST_FAMILY_B_ID, user_id: userId, role: "admin",
+  }, jwt, "resolution=merge-duplicates,return=minimal");
+
+  console.log("[global-setup] ✓ Test Families A & B ready");
+
+  // ── 1. Family tree nodes ───────────────────────────────────────────────────────
+  const BASE_NODE = { family_id: TEST_FAMILY_ID, born: null as null|string, partner_name: null as null|string,
     partner_born: null as null|string, email: null as null|string, phone: null as null|string,
     address: null as null|string, avatar: null as null|string, user_id: null as null|string };
   const treeNodes = [
@@ -80,20 +104,16 @@ async function globalSetup() {
     { ...BASE_NODE, id: "00000000-0000-0000-5eed-000000000006", parent_id: "00000000-0000-0000-5eed-000000000003", name: "Seed Grandchild",  born: "2010", sort_order: 0 },
   ];
 
-  // POST array — all objects now have identical keys so PostgREST accepts them
   await rest("POST", "family_tree_nodes", treeNodes, jwt, "resolution=merge-duplicates,return=minimal");
   console.log("[global-setup] ✓ Tree nodes upserted");
 
   // ── 2. Stories — bare INSERT (no RETURNING) then publish via RPC ──────────────
-  // visibility='family' INSERT + RETURNING causes 403 (SELECT RLS checks story_families first)
-  // Solution: POST with return=minimal, then link via RPC, then SELECT is safe
-
   await rest("POST", "updates", {
     id: SEED_STORY_FAM, author_id: userId, ai_generated: false, hashtags: ["seed"],
     title: "[SEED] Family story", content: "Seed family story for testing edit/delete and copy link.",
     visibility: "family", event_id: null, image_url: null,
-  }, jwt, "return=minimal"); // return=minimal avoids RETURNING * which triggers SELECT RLS
-  await rpc("publish_story_to_family", { p_story_id: SEED_STORY_FAM, p_family_id: FAMILY_ID }, jwt);
+  }, jwt, "return=minimal");
+  await rpc("publish_story_to_family", { p_story_id: SEED_STORY_FAM, p_family_id: TEST_FAMILY_ID }, jwt);
 
   await rest("POST", "updates", {
     id: SEED_STORY_OPEN, author_id: userId, ai_generated: false, hashtags: ["seed"],
@@ -108,7 +128,7 @@ async function globalSetup() {
     title: "[SEED] Comments-enabled story", content: "This story has comments enabled for testing.",
     visibility: "family", event_id: null, image_url: null, comments_enabled: true,
   }, jwt, "return=minimal");
-  await rpc("publish_story_to_family", { p_story_id: SEED_STORY_COMMENTS, p_family_id: FAMILY_ID }, jwt);
+  await rpc("publish_story_to_family", { p_story_id: SEED_STORY_COMMENTS, p_family_id: TEST_FAMILY_ID }, jwt);
   console.log("[global-setup] ✓ Comments-enabled story upserted");
 
   // ── 4. Event — bare INSERT then share ─────────────────────────────────────────
@@ -118,10 +138,10 @@ async function globalSetup() {
     description: "Seed ongoing event for TC-17 Close Event test.",
     location: "Seed Location", started_at: new Date().toISOString(),
   }, jwt, "return=minimal");
-  await rpc("share_event_to_family", { p_event_id: SEED_EVENT_ID, p_family_id: FAMILY_ID }, jwt);
+  await rpc("share_event_to_family", { p_event_id: SEED_EVENT_ID, p_family_id: TEST_FAMILY_ID }, jwt);
   console.log("[global-setup] ✓ Event upserted");
 
-  console.log("[global-setup] ✓ All seed data ready — tests will run without skipping");
+  console.log("[global-setup] ✓ All seed data ready under Test Family — tests will run without skipping");
 }
 
 export default globalSetup;

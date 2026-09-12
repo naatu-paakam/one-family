@@ -48,15 +48,15 @@ setup("authenticate test user and save session", async ({ page }) => {
   await expect(page.locator("header button.rounded-full")).toBeVisible({ timeout: 10000 });
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  // Switch active family to NaatuPaakam (golden-path family that has seed data)
-  // This ensures all tests that depend on seed data find the right family
-  const NAATU_FAMILY_ID = "842eda43-7cc9-4b32-bee3-f2aaa72d4d4b";
+  // Switch active family to the Test Family (all seed data lives there)
+  // This keeps tests isolated from real production families (NaatuPaakam etc.)
+  const TEST_FAMILY_ID = "00000000-0000-0000-test-000000000001";
   await page.evaluate((id) => {
     localStorage.setItem("activeFamilyId", id);
-  }, NAATU_FAMILY_ID);
+  }, TEST_FAMILY_ID);
   // Reload so FamilyContext picks up the new active family before saving state
   await page.reload();
-  await expect(page.locator("header").getByText(/NaatuPaakam/)).toBeVisible({ timeout: 10000 });
+  await expect(page.locator("header").getByText(/Test Family A/)).toBeVisible({ timeout: 10000 });
 
   // Save the full browser state (localStorage, cookies, sessionStorage)
   // All tests will start with NaatuPaakam as active family and a valid session

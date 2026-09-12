@@ -343,9 +343,7 @@ export default function Events() {
               session={session}
               familyId={activeFamilyId}
               enableVideoUpload={enableVideoUpload}
-              onClose={() => {
-                if (confirm(`Close event "${selected.title}"?`)) endEvent(selected.id);
-              }}
+              onClose={() => endEvent(selected.id)}
               onModify={() => setMode("edit")}
               onAddInvite={(name, email, invitedUserId) => handleAddInvite(selected.id, name, email, invitedUserId)}
               onDeleteInvite={(invId) => handleDeleteInvite(invId, selected.id)}
@@ -515,6 +513,7 @@ function EventDetail({
   const [addError, setAddError] = useState("");
   const [members, setMembers] = useState<{ user_id: string; profiles: { full_name: string | null; avatar_url: string | null } | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const cat = categoryOf(event);
 
@@ -677,16 +676,27 @@ function EventDetail({
       )}
 
       {/* Close Event */}
-      {canClose && (
+      {canClose && !showCloseConfirm && (
         <div className="mt-4 pt-4 border-t">
           <Button
             size="sm"
             variant="outline"
             className="text-destructive border-destructive/30 hover:bg-destructive/5"
-            onClick={onClose}
+            onClick={() => setShowCloseConfirm(true)}
           >
             Close Event
           </Button>
+        </div>
+      )}
+      {canClose && showCloseConfirm && (
+        <div className="mt-4 pt-4 border-t rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <p className="text-red-800 font-medium mb-2">
+            Close "{event.title}"? This marks the event as past.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Event</Button>
+            <Button size="sm" variant="outline" onClick={() => setShowCloseConfirm(false)}>Cancel</Button>
+          </div>
         </div>
       )}
 
@@ -726,6 +736,7 @@ function ModifyEventForm({
   const [visibility, setVisibility] = useState<"family" | "open" | "public">(event.visibility ?? "family");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function handleSave() {
     if (!title.trim()) { setError("Title is required"); return; }
@@ -797,16 +808,25 @@ function ModifyEventForm({
         </Button>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
-      {canDelete && onDelete && (
+      {canDelete && onDelete && !showDeleteConfirm && (
         <Button
           variant="destructive"
           className="w-full mt-1"
-          onClick={async () => {
-            if (confirm(`Delete "${event.title}"? This cannot be undone.`)) await onDelete();
-          }}
+          onClick={() => setShowDeleteConfirm(true)}
         >
           Delete Event
         </Button>
+      )}
+      {canDelete && onDelete && showDeleteConfirm && (
+        <div className="mt-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <p className="text-red-800 font-medium mb-2">
+            Delete "{event.title}"? This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" onClick={onDelete} disabled={loading}>Delete</Button>
+            <Button size="sm" variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+          </div>
+        </div>
       )}
     </div>
   );
