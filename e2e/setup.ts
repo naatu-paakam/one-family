@@ -27,7 +27,9 @@
  */
 
 import { test as setup, expect } from "@playwright/test";
-const AUTH_FILE = ".playwright/auth.json";
+import * as fs from "fs";
+const AUTH_FILE    = ".playwright/auth.json";
+const FAMILIES_FILE = ".playwright/test-families.json";
 
 const EMAIL    = "test@naatupakam.family";
 const PASSWORD = "Test123!"; // safe in setup — not a production secret, see .notes
@@ -48,14 +50,16 @@ setup("authenticate test user and save session", async ({ page }) => {
   await expect(page.locator("header button.rounded-full")).toBeVisible({ timeout: 10000 });
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  // Switch active family to the Test Family (all seed data lives there)
-  // This keeps tests isolated from real production families (NaatuPaakam etc.)
-  const TEST_FAMILY_ID = "00000000-0000-0000-test-000000000001";
+  // Switch active family to Test Family A (all seed data lives there, not NaatuPaakam)
+  const families = fs.existsSync(FAMILIES_FILE)
+    ? JSON.parse(fs.readFileSync(FAMILIES_FILE, "utf8")) as { a?: string; b?: string }
+    : {};
+  if (!families.a) throw new Error("Test Family A not found — globalSetup must run first");
   await page.evaluate((id) => {
     localStorage.setItem("activeFamilyId", id);
-  }, TEST_FAMILY_ID);
-  // Reload so FamilyContext picks up the new active family before saving state
+  }, families.a);
   await page.reload();
+  // Wait for Test Family A badge — name is set by create_family RPC
   await expect(page.locator("header").getByText(/Test Family A/)).toBeVisible({ timeout: 10000 });
 
   // Save the full browser state (localStorage, cookies, sessionStorage)

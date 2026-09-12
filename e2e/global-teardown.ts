@@ -15,8 +15,10 @@ const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY!;
 const EMAIL    = "test@naatupakam.family";
 const PASSWORD = "Test123!";
 
-const TEST_FAMILY_ID   = "00000000-0000-0000-test-000000000001";
-const TEST_FAMILY_B_ID = "00000000-0000-0000-test-000000000002";
+import * as fs from "fs";
+import * as path from "path";
+
+const FAMILIES_FILE = path.resolve(".playwright/test-families.json");
 
 async function del(table: string, filter: string, jwt: string) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
@@ -64,9 +66,14 @@ async function globalTeardown() {
   console.log("[global-teardown] Cleaning up Test Family and seed data…");
 
   // ── 1. Delete Test Families via portal RPC — cascade removes all child rows ──
-  // portal_delete_family is security-definer and handles FK cascade correctly
-  await rpc("portal_delete_family", { p_family_id: TEST_FAMILY_ID },   jwt);
-  await rpc("portal_delete_family", { p_family_id: TEST_FAMILY_B_ID }, jwt);
+  let families: { a?: string; b?: string } = {};
+  if (fs.existsSync(FAMILIES_FILE)) {
+    try { families = JSON.parse(fs.readFileSync(FAMILIES_FILE, "utf8")); } catch {}
+  }
+  if (families.a) await rpc("portal_delete_family", { p_family_id: families.a }, jwt);
+  if (families.b) await rpc("portal_delete_family", { p_family_id: families.b }, jwt);
+  // Remove the families file so next run starts fresh
+  if (fs.existsSync(FAMILIES_FILE)) fs.unlinkSync(FAMILIES_FILE);
   console.log("[global-teardown] ✓ Deleted Test Families A & B (cascade)");
 
   // ── 2. Stories without a family link (open/public visibility) ────────────────

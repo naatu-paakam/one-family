@@ -75,6 +75,65 @@
 
 ---
 
+## MVP Release 1c — Quality & UX polish — SHIPPED ✅ (2026-09-12)
+
+### Visibility UX
+| Task | Status |
+|---|---|
+| Chip label "to Family" → "Family" across stories and events | ✅ |
+| Section label unified to "Who can see this?" (was "Visibility" in stories, "Who can see this event?" in events) | ✅ |
+| `/stories/:id` and `/events/:id` banners correctly show ❤️ family / 👥 open / 🌐 public tier | ✅ |
+
+### Events
+| Task | Status |
+|---|---|
+| Create event RLS fix (bare INSERT → link to family → SELECT — same pattern as stories) | ✅ |
+| Delete button in Modify Event form (owner or family admin only) | ✅ |
+| Event list sourced from `fetchAllEvents()` — prevents orphaned-story bleed across families | ✅ |
+| Add invite typeahead from family members; email field removed | ✅ |
+| Invited user can update own RSVP status; `invited_user_id` column added | ✅ |
+| Organiser/admin can delete individual invites (trash icon) | ✅ |
+| Visibility badge on event cards and detail panel | ✅ |
+| DB: DELETE RLS policy on events (migration 000004) | ✅ |
+
+### Stories — Comments
+| Task | Status |
+|---|---|
+| `comments_enabled` toggle per story (author-controlled, default off) | ✅ |
+| Shared `CommentThread` component (client/components/CommentThread.tsx) for stories + events | ✅ |
+| Comment count badge on story cards | ✅ |
+| DB: `story_id` nullable on `comments`; `event_id` made nullable; CHECK constraint (migrations 000008, 000009) | ✅ |
+| `12` new TC-SCOM-* Playwright tests, all passing | ✅ |
+
+### RBAC hardening
+| Task | Status |
+|---|---|
+| `family_members` INSERT: restricted to portal admin (all joins via security-definer RPC) | ✅ |
+| `family_members` SELECT: members can see co-members (was own-row only) | ✅ |
+| `family_members` DELETE: family admins can remove members | ✅ |
+| `comments` DELETE: family admins can moderate comments in their events | ✅ |
+| DB: migration 000006 | ✅ |
+
+### Family Tree
+| Task | Status |
+|---|---|
+| Save row above Add Child/Sibling row in sidebar | ✅ |
+| Inline delete confirmation (no browser popup) — same pattern applied to Events and Stories | ✅ |
+| `buildTree` handles multiple root nodes — no member silently hidden (BUG-005 fix) | ✅ |
+| BUG-001 through BUG-004: all resolved, docs removed | ✅ |
+| TC-TREE-B04, B05, B05b new regression tests | ✅ |
+
+### Test infrastructure
+| Task | Status |
+|---|---|
+| `TEST_FAMILY_ID` / `TEST_FAMILY_B_ID` — deterministic test families, all seed data isolated there | ✅ |
+| `globalSetup`: creates Test Family A & B + seeds stories/events/tree under them | ✅ |
+| `globalTeardown`: `portal_delete_family` RPC cascade-deletes both families (one call, no per-table scripts) | ✅ |
+| `setup.ts`: storageState pre-selects Test Family A — no NaatuPaakam pollution | ✅ |
+| Orphan "New Post" test stories cleaned from DB; teardown now sweeps them by author_id | ✅ |
+
+---
+
 ## MVP Release 2 — TODO 🔜
 
 **Goal:** Deeper multi-family UI for stories, events, and family tree; plus member promote/demote.
