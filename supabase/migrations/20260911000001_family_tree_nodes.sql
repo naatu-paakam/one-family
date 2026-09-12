@@ -4,7 +4,7 @@
 
 -- ── Create flat node table ────────────────────────────────────────────────────
 
-create table public.family_tree_nodes (
+create table if not exists public.family_tree_nodes (
   id           uuid primary key default gen_random_uuid(),
   family_id    uuid not null references public.families(id) on delete cascade,
   parent_id    uuid references public.family_tree_nodes(id) on delete cascade,
@@ -32,19 +32,25 @@ create table public.family_tree_nodes (
 );
 
 -- Touch updated_at on any update
+drop trigger if exists family_tree_nodes_updated_at on public.family_tree_nodes;
 create trigger family_tree_nodes_updated_at
   before update on public.family_tree_nodes
   for each row execute procedure public.touch_updated_at();
 
--- Indexes for common queries
-create index on public.family_tree_nodes(family_id);
-create index on public.family_tree_nodes(parent_id);
-create index on public.family_tree_nodes(user_id);
-create index on public.family_tree_nodes using gin(to_tsvector('simple', name));
+-- Indexes for common queries (idempotent via IF NOT EXISTS)
+create index if not exists family_tree_nodes_family_id_idx on public.family_tree_nodes(family_id);
+create index if not exists family_tree_nodes_parent_id_idx on public.family_tree_nodes(parent_id);
+create index if not exists family_tree_nodes_user_id_idx   on public.family_tree_nodes(user_id);
+create index if not exists family_tree_nodes_name_fts_idx  on public.family_tree_nodes using gin(to_tsvector('simple', name));
 
 -- ── RLS ───────────────────────────────────────────────────────────────────────
 
 alter table public.family_tree_nodes enable row level security;
+
+drop policy if exists "Family members can view tree nodes"   on public.family_tree_nodes;
+drop policy if exists "Family members can insert tree nodes" on public.family_tree_nodes;
+drop policy if exists "Family members can update tree nodes" on public.family_tree_nodes;
+drop policy if exists "Family members can delete tree nodes" on public.family_tree_nodes;
 
 create policy "Family members can view tree nodes"
   on public.family_tree_nodes for select

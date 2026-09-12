@@ -15,16 +15,18 @@ import { format } from "date-fns";
 
 export default function PublicEvent() {
   const { id } = useParams<{ id: string }>();
-  const { session, openAuthModal } = useAuth();
+  const { session, openAuthModal, loading: authLoading } = useAuth();
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [requiresSignIn, setRequiresSignIn] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || authLoading) return; // wait for auth state to be known
     setLoading(true);
     setEvent(null);
     setNotFound(false);
+    setRequiresSignIn(false);
 
     supabase
       .from("events")
@@ -33,20 +35,41 @@ export default function PublicEvent() {
       .single()
       .then(({ data, error }) => {
         if (error || !data) {
-          // RLS blocked read — family event requires membership
-          setNotFound(true);
+          // RLS blocked — not a member or event doesn't exist
+          if (!session) { setRequiresSignIn(true); }
+          else { setNotFound(true); }
         } else if (data.visibility === "family") {
-          // Family event: show if signed in (RLS confirms membership), else prompt sign-in
-          if (!session) { setNotFound(true); } // notFound triggers sign-in CTA via existing logic
-          else { setEvent(data); }
+          if (!session) { setRequiresSignIn(true); }
+          else { setEvent(data); } // RLS confirmed membership
         } else {
           setEvent(data);
         }
         setLoading(false);
       });
-  }, [id, session]); // re-run when session changes after sign-in
+  }, [id, session, authLoading]); // re-run when auth state changes
 
   if (loading) return <div className="container py-20 text-center text-muted-foreground">Loading…</div>;
+
+  if (requiresSignIn) {
+    return (
+      <div className="container py-20 flex flex-col items-center gap-5 text-center max-w-sm mx-auto">
+        <div className="text-5xl">🔐</div>
+        <h1 className="text-2xl font-extrabold">Sign in to view this event</h1>
+        <p className="text-muted-foreground text-sm">
+          This event is shared with family members. Sign in to your Family Vibes account to view it.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 w-full">
+          <Button className="flex-1 bg-rose-600 hover:bg-rose-700"
+            onClick={() => openAuthModal({ defaultTab: "signup", redirectTo: `/events/${id}` })}>
+            <LogIn className="h-4 w-4 mr-2" /> Sign in
+          </Button>
+          <Button asChild variant="outline" className="flex-1">
+            <Link to="/">Go to home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (notFound) {
     return (
@@ -68,15 +91,21 @@ export default function PublicEvent() {
     );
   }
 
-  const isOpen = event.visibility === "open";
   const isPast = !!event.closed_at;
+
+  const BANNER: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
+    family: { icon: "❤️", label: "Family event — visible to family members",  bg: "bg-pink-50",    text: "text-pink-700",  border: "border-pink-200" },
+    open:   { icon: "👥", label: "Open event — visible to registered users",   bg: "bg-blue-50",    text: "text-blue-700",  border: "border-blue-200" },
+    public: { icon: "🌐", label: "Public event — visible to everyone",         bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  };
+  const banner = BANNER[event.visibility] ?? BANNER.family;
 
   return (
     <div className="container py-10 max-w-2xl mx-auto">
       {/* Visibility banner */}
-      <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${isOpen ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
-        <span>{isOpen ? "👥" : "🌐"}</span>
-        <span>{isOpen ? "Open event — visible to registered users" : "Public event — visible to everyone"}</span>
+      <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${banner.bg} ${banner.text} border ${banner.border}`}>
+        <span>{banner.icon}</span>
+        <span>{banner.label}</span>
       </div>
 
       <div className="flex items-start gap-3 mb-4">

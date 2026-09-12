@@ -1,6 +1,7 @@
 -- Enrich portal_fetch_families with creator name and admin member list.
 -- Replaces the previous RPC (same name, new return shape).
 
+drop function if exists public.portal_fetch_families() cascade;
 create or replace function public.portal_fetch_families()
 returns table (
   id              uuid,

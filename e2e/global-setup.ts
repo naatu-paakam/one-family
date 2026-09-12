@@ -12,10 +12,11 @@ const PASSWORD = "Test123!";
 const FAMILY_ID = "842eda43-7cc9-4b32-bee3-f2aaa72d4d4b";
 
 // Deterministic seed IDs
-export const SEED_ROOT_ID     = "00000000-0000-0000-5eed-000000000001";
-export const SEED_STORY_FAM   = "00000000-0000-0000-5eed-000000000008";
-export const SEED_STORY_OPEN  = "00000000-0000-0000-5eed-000000000009";
-export const SEED_EVENT_ID    = "00000000-0000-0000-5eed-000000000010";
+export const SEED_ROOT_ID          = "00000000-0000-0000-5eed-000000000001";
+export const SEED_STORY_FAM        = "00000000-0000-0000-5eed-000000000008";
+export const SEED_STORY_OPEN       = "00000000-0000-0000-5eed-000000000009";
+export const SEED_EVENT_ID         = "00000000-0000-0000-5eed-000000000010";
+export const SEED_STORY_COMMENTS   = "00000000-0000-0000-5eed-000000000011";
 
 async function rest(method: string, path: string, body: any, jwt: string, prefer = "return=minimal") {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -101,7 +102,16 @@ async function globalSetup() {
   }, jwt, "return=minimal");
   console.log("[global-setup] ✓ Stories upserted");
 
-  // ── 3. Event — bare INSERT then share ─────────────────────────────────────────
+  // ── 3. Story with comments enabled ───────────────────────────────────────────
+  await rest("POST", "updates", {
+    id: SEED_STORY_COMMENTS, author_id: userId, ai_generated: false, hashtags: ["seed"],
+    title: "[SEED] Comments-enabled story", content: "This story has comments enabled for testing.",
+    visibility: "family", event_id: null, image_url: null, comments_enabled: true,
+  }, jwt, "return=minimal");
+  await rpc("publish_story_to_family", { p_story_id: SEED_STORY_COMMENTS, p_family_id: FAMILY_ID }, jwt);
+  console.log("[global-setup] ✓ Comments-enabled story upserted");
+
+  // ── 4. Event — bare INSERT then share ─────────────────────────────────────────
   await rest("POST", "events", {
     id: SEED_EVENT_ID, created_by: userId, visibility: "family", closed_at: null,
     title: "[SEED] Ongoing Test Event",
