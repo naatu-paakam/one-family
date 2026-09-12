@@ -24,8 +24,9 @@ end;
 
 -- ── Update RLS on updates (stories) ──────────────────────────────────────────
 
-drop policy if exists "Updates are publicly readable"       on updates;
-drop policy if exists "Stories readable by family members"  on updates;
+drop policy if exists "Updates are publicly readable"           on updates;
+drop policy if exists "Stories readable by family members"      on updates;
+drop policy if exists "Stories readable by visibility tier"     on updates;
 
 create policy "Stories readable by visibility tier"
   on updates for select using (
@@ -45,8 +46,9 @@ create policy "Stories readable by visibility tier"
 
 -- ── Update RLS on events ──────────────────────────────────────────────────────
 
-drop policy if exists "Events viewable by everyone"         on events;
-drop policy if exists "Events readable by family members"   on events;
+drop policy if exists "Events viewable by everyone"           on events;
+drop policy if exists "Events readable by family members"     on events;
+drop policy if exists "Events readable by visibility tier"    on events;
 
 create policy "Events readable by visibility tier"
   on events for select using (
@@ -64,7 +66,8 @@ create policy "Events readable by visibility tier"
 
 -- ── Update RLS on families ────────────────────────────────────────────────────
 
-drop policy if exists "Family members can view their families" on families;
+drop policy if exists "Family members can view their families"  on families;
+drop policy if exists "Families readable by visibility tier"    on families;
 
 create policy "Families readable by visibility tier"
   on families for select using (
@@ -79,10 +82,12 @@ create policy "Families readable by visibility tier"
 -- ── Update RLS on comments ────────────────────────────────────────────────────
 -- Comments are readable by registered users who can see the parent event.
 
-drop policy if exists "Comments readable by family members"           on comments;
-drop policy if exists "Comments readable by event family members"     on comments;
-drop policy if exists "Family members can insert comments"            on comments;
-drop policy if exists "Authenticated users can insert comments"       on comments;
+drop policy if exists "Comments readable by family members"                          on comments;
+drop policy if exists "Comments readable by event family members"                    on comments;
+drop policy if exists "Family members can insert comments"                           on comments;
+drop policy if exists "Authenticated users can insert comments"                      on comments;
+drop policy if exists "Comments readable by registered users on visible events"      on comments;
+drop policy if exists "Registered users can comment on visible events"               on comments;
 
 create policy "Comments readable by registered users on visible events"
   on comments for select using (
@@ -118,7 +123,8 @@ create policy "Registered users can comment on visible events"
 
 -- ── Update RLS on comment_reactions ──────────────────────────────────────────
 
-drop policy if exists "Reactions readable by event family members" on comment_reactions;
+drop policy if exists "Reactions readable by event family members"                on comment_reactions;
+drop policy if exists "Reactions readable by registered users on visible events"  on comment_reactions;
 
 create policy "Reactions readable by registered users on visible events"
   on comment_reactions for select using (

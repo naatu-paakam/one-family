@@ -91,15 +91,21 @@ export default function PublicEvent() {
     );
   }
 
-  const isOpen = event.visibility === "open";
   const isPast = !!event.closed_at;
+
+  const BANNER: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
+    family: { icon: "❤️", label: "Family event — visible to family members",  bg: "bg-pink-50",    text: "text-pink-700",  border: "border-pink-200" },
+    open:   { icon: "👥", label: "Open event — visible to registered users",   bg: "bg-blue-50",    text: "text-blue-700",  border: "border-blue-200" },
+    public: { icon: "🌐", label: "Public event — visible to everyone",         bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  };
+  const banner = BANNER[event.visibility] ?? BANNER.family;
 
   return (
     <div className="container py-10 max-w-2xl mx-auto">
       {/* Visibility banner */}
-      <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${isOpen ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
-        <span>{isOpen ? "👥" : "🌐"}</span>
-        <span>{isOpen ? "Open event — visible to registered users" : "Public event — visible to everyone"}</span>
+      <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${banner.bg} ${banner.text} border ${banner.border}`}>
+        <span>{banner.icon}</span>
+        <span>{banner.label}</span>
       </div>
 
       <div className="flex items-start gap-3 mb-4">

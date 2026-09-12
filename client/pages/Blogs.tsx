@@ -15,7 +15,9 @@ import {
   deleteUpdate,
   uploadImage,
   callEdgeFunction,
+  fetchStoryCommentCounts,
 } from "@/lib/supabase";
+import CommentThread from "@/components/CommentThread";
 import { format } from "date-fns";
 
 function isVideoUrl(url: string) {
@@ -47,6 +49,7 @@ type Update = {
   author_id: string;
   ai_generated: boolean | null;
   event_id: string | null;
+  comments_enabled: boolean;
   created_at: string;
   updated_at: string;
   visibility: "private" | "family" | "open" | "public";
@@ -77,7 +80,7 @@ function tabOf(p: Update): "published" | "draft" {
 
 const VISIBILITY_LABELS: Record<string, { label: string; short: string; icon: string; description: string }> = {
   private: { label: "Private",  short: "Private to you", icon: "🔒", description: "Only you can see this — saved as draft" },
-  family:  { label: "Family",   short: "to Family",      icon: "❤️", description: "Visible to family members only" },
+  family:  { label: "Family",   short: "Family",      icon: "❤️", description: "Visible to family members only" },
   open:    { label: "Open",     short: "All users",      icon: "👥", description: "Any registered user can read" },
   public:  { label: "Public",   short: "Public",         icon: "🌐", description: "Anyone can read — no sign-in required" },
 };
@@ -123,6 +126,7 @@ export default function Blogs() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("none");
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
 
   async function loadPosts() {
     setLoading(true);
@@ -130,6 +134,16 @@ export default function Blogs() {
       const data = await fetchUpdates({ limit: 100, familyId: activeFamilyId });
       setPosts(data ?? []);
       if (!selectedId && data?.length) setSelectedId(data[0].id);
+      // Fetch comment counts for stories that have comments enabled
+      if (data?.length) {
+        const enabledIds = (data as Update[])
+          .filter((p) => p.comments_enabled)
+          .map((p) => p.id);
+        if (enabledIds.length > 0) {
+          const counts = await fetchStoryCommentCounts(enabledIds);
+          setCommentCounts(counts);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -223,6 +237,7 @@ export default function Blogs() {
                           key={p.id}
                           post={p}
                           active={selected?.id === p.id}
+                          commentCount={commentCounts[p.id]}
                           onSelect={() => {
                             setSelectedId(p.id);
                             setMode("none");
@@ -339,6 +354,23 @@ export default function Blogs() {
                   </Button>
                 </div>
               )}
+              {selected.comments_enabled && (
+                <div className="mt-5 pt-5 border-t">
+                  <CommentThread
+                    parentId={selected.id}
+                    parentType="story"
+                    familyId={activeFamilyId}
+                    session={session}
+                    enableVideoUpload={enableVideoUpload}
+                    onCommentCountChange={(delta) =>
+                      setCommentCounts((prev) => ({
+                        ...prev,
+                        [selected.id]: Math.max(0, (prev[selected.id] ?? 0) + delta),
+                      }))
+                    }
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">
@@ -356,14 +388,15 @@ export default function Blogs() {
 function PostCard({
   post,
   active,
+  commentCount,
   onSelect,
 }: {
   post: Update;
   active?: boolean;
+  commentCount?: number;
   onSelect: () => void;
 }) {
   const author = post.profiles?.full_name ?? "Family Member";
-  const status = tabOf(post);
   return (
     <button
       onClick={onSelect}
@@ -398,6 +431,12 @@ function PostCard({
       <p className="mt-3 text-sm text-muted-foreground line-clamp-3">
         {post.content}
       </p>
+      {post.comments_enabled && commentCount != null && commentCount > 0 && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <span>💬</span>
+          <span>{commentCount} comment{commentCount !== 1 ? "s" : ""}</span>
+        </div>
+      )}
     </button>
   );
 }
@@ -411,6 +450,7 @@ type FormPayload = {
   hashtags: string[];
   author_id: string;
   event_id: string | null;
+  comments_enabled: boolean;
   visibility: "private" | "family" | "open" | "public";
   familyId?: string | null;
 };
@@ -436,6 +476,7 @@ function PostForm({
 }) {
   const [title, setTitle] = useState(post?.title ?? "New Post");
   const [visibility, setVisibility] = useState<"private" | "family" | "open" | "public">(post?.visibility ?? "private");
+  const [commentsEnabled, setCommentsEnabled] = useState(post?.comments_enabled ?? false);
   // Multi-section content: existing posts split on double-newline, new posts start with one section
   const [sections, setSections] = useState<string[]>(
     post?.content ? post.content.split(/\n\n+/) : [""]
@@ -528,6 +569,7 @@ function PostForm({
         hashtags: parseTags(tags),
         author_id: authorId,
         event_id: selectedEventId || null,
+        comments_enabled: commentsEnabled,
         visibility,
         familyId,
       });
@@ -662,7 +704,7 @@ function PostForm({
 
       {/* Visibility picker — compact chips, ADR-010 */}
       <div className="mt-3">
-        <p className="text-xs text-muted-foreground mb-1.5">Visibility</p>
+        <p className="text-xs text-muted-foreground mb-1.5">Who can see this?</p>
         <div className="flex flex-wrap gap-1.5">
           {(["private", "family", "open", "public"] as const).map((v) => {
             const meta = VISIBILITY_LABELS[v];
@@ -686,6 +728,19 @@ function PostForm({
           })}
         </div>
       </div>
+
+      {/* Comments toggle — only relevant for published posts */}
+      {post && (
+        <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={commentsEnabled}
+            onChange={(e) => setCommentsEnabled(e.target.checked)}
+            className="h-3.5 w-3.5 rounded"
+          />
+          Allow comments
+        </label>
+      )}
 
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSubmit} disabled={saving}>

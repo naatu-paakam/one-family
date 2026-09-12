@@ -140,6 +140,11 @@ export async function deleteUpdate(id) {
   if (error) throw error
 }
 
+export async function deleteEvent(id: string) {
+  const { error } = await supabase.from('events').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ── Summaries ─────────────────────────────────────────────────────────────────
 
 export async function fetchLatestSummary() {
@@ -253,16 +258,27 @@ export async function createEvent({ title, description, location = null, familyI
   familyId?: string | null; visibility?: EventVisibility
 }) {
   const userId = (await supabase.auth.getUser()).data.user?.id
-  const { data, error } = await supabase
+  // Step 1: bare INSERT — no .select() so PostgREST doesn't append RETURNING *.
+  // SELECT RLS for visibility='family' requires an event_families row which doesn't exist yet.
+  const newId = crypto.randomUUID()
+  const { error: insertError } = await supabase
     .from('events')
-    .insert({ title, description, location, created_by: userId, visibility })
-    .select()
-    .single()
-  if (error) throw error
-  if (familyId && data?.id) {
-    await supabase.rpc('share_event_to_family', { p_event_id: data.id, p_family_id: familyId })
+    .insert({ id: newId, title, description, location, created_by: userId, visibility })
+  if (insertError) throw insertError
+
+  // Step 2: link to family (visibility='family' or any) — creates the event_families row.
+  if (familyId) {
+    await supabase.rpc('share_event_to_family', { p_event_id: newId, p_family_id: familyId })
   }
-  return data
+
+  // Step 3: SELECT is now safe — event_families row exists for 'family' visibility.
+  const { data, error: fetchError } = await supabase
+    .from('events')
+    .select('*, event_families(family_id)')
+    .eq('id', newId)
+    .maybeSingle()
+  if (fetchError) throw fetchError
+  return data ?? { id: newId, title, description, location, created_by: userId, visibility }
 }
 
 export async function setEventVisibility(eventId: string, visibility: EventVisibility) {
@@ -305,11 +321,11 @@ export async function fetchAllInvites(eventIds: string[]) {
   return data ?? []
 }
 
-export async function addInvite(eventId: string, full_name: string, email: string | null) {
+export async function addInvite(eventId: string, full_name: string, email: string | null, invitedUserId?: string | null) {
   const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('invites')
-    .insert({ event_id: eventId, full_name, email: email || null, invited_by: user?.id })
+    .insert({ event_id: eventId, full_name, email: email || null, invited_by: user?.id, invited_user_id: invitedUserId ?? null })
     .select()
     .single()
   if (error) throw error
@@ -463,21 +479,21 @@ export async function fetchCommentCounts(eventIds: string[]): Promise<Record<str
   return counts
 }
 
-const COMMENT_SELECT = '*, profiles!comments_author_id_fkey(full_name, avatar_url), comment_reactions(comment_id, user_id, emoji)'
+export const COMMENT_SELECT = '*, profiles!comments_author_id_fkey(full_name, avatar_url), comment_reactions(comment_id, user_id, emoji)'
 
-export async function fetchComments(eventId: string) {
+export async function fetchComments({ eventId, storyId }: { eventId?: string; storyId?: string }) {
   if (isDemo) return []
-  const { data, error } = await supabase
-    .from('comments')
-    .select(COMMENT_SELECT)
-    .eq('event_id', eventId)
-    .order('created_at', { ascending: true })
+  let q = supabase.from('comments').select(COMMENT_SELECT).order('created_at', { ascending: true })
+  if (eventId) q = q.eq('event_id', eventId)
+  else if (storyId) q = q.eq('story_id', storyId)
+  const { data, error } = await q
   if (error) throw error
   return data ?? []
 }
 
 export async function createComment(payload: {
-  event_id: string
+  event_id?: string | null
+  story_id?: string | null
   author_id: string
   content: string | null
   image_url: string | null
@@ -490,6 +506,17 @@ export async function createComment(payload: {
     .single()
   if (error) throw error
   return data
+}
+
+export async function fetchStoryCommentCounts(storyIds: string[]): Promise<Record<string, number>> {
+  if (isDemo || storyIds.length === 0) return {}
+  const { data, error } = await supabase.from('comments').select('story_id').in('story_id', storyIds)
+  if (error) throw error
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    if (row.story_id) counts[row.story_id] = (counts[row.story_id] ?? 0) + 1
+  }
+  return counts
 }
 
 export async function deleteComment(id: string) {
