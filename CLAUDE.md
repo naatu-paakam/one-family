@@ -62,15 +62,16 @@ The app runs in **demo mode** (no real DB calls) when these are absent.
 ## After every development change — run Playwright tests
 
 ```bash
-npx playwright test            # run all 8 spec files
-npx playwright test e2e/sanity.spec.ts    # smoke — core pages load
-npx playwright test e2e/auth.spec.ts      # sign-in, sign-out, TC-AUTH-*
-npx playwright test e2e/mvp.spec.ts       # MVP feature acceptance
-npx playwright test e2e/portal.spec.ts    # portal admin routes + gates
-npx playwright test e2e/regression.spec.ts# regression guard
-npx playwright test e2e/tree.spec.ts      # family tree CRUD
-npx playwright test e2e/visibility.spec.ts# ADR-010 visibility tiers
-npx playwright test e2e/e2e-full.spec.ts  # full user journeys
+npx playwright test                       # run all 9 spec files (~207 tests)
+npx playwright test e2e/sanity.spec.ts    # smoke — core pages load (9)
+npx playwright test e2e/auth.spec.ts      # sign-in, sign-out, TC-AUTH-* (12)
+npx playwright test e2e/mvp.spec.ts       # MVP feature acceptance (16)
+npx playwright test e2e/portal.spec.ts    # portal admin routes + gates (16)
+npx playwright test e2e/regression.spec.ts# regression guard (39)
+npx playwright test e2e/tree.spec.ts      # family tree CRUD + BUG-* (28)
+npx playwright test e2e/visibility.spec.ts# ADR-010 visibility tiers (27)
+npx playwright test e2e/story-comments.spec.ts # TC-SCOM-* story comments (11)
+npx playwright test e2e/e2e-full.spec.ts  # full user journeys (49)
 ```
 
 > `RESEND_API_KEY` must be set for TC-AUTH-04 (email invite test); it is not required for the rest of the suite.
@@ -78,7 +79,7 @@ npx playwright test e2e/e2e-full.spec.ts  # full user journeys
 Sign in with:
 - Email: `test@naatupakam.family`
 - Password: see `.notes` (gitignored — never commit test credentials)
-- URL: `http://localhost:5176`
+- URL: `http://localhost:5177`
 
 ### Checklist
 
@@ -114,25 +115,26 @@ Sign in with:
 
 5. **Stories page** (`/stories`)
    - Posts load from Supabase scoped to active family (All / Published / Drafts tabs)
-   - Clicking a card shows detail in right panel
-   - Event badge (🎉 EventName) shown on event-linked posts
-   - When signed in: "New Post" button visible
-   - Create post: title required; AI generate button populates content
-   - Edit/delete only shown if user is author
-   - Images upload to `{familyId}/{filename}` path in storage bucket
+   - Visibility picker: 🔒 Private / ❤️ Family / 👥 All users / 🌐 Public — label "Who can see this?"
+   - Clicking a card shows detail in right panel; visibility badge on each card
+   - Comments: author can enable/disable per story (`comments_enabled`); count badge shown when > 0
+   - Edit/delete shown if user is author or family admin; delete uses inline confirm (no browser popup)
+   - `/stories/:id` public route — correct ❤️/👥/🌐 banner; sign-in gate for family/open
 
 6. **Events page** (`/events`)
    - Upcoming / Ongoing / Past / All tabs filter correctly for active family
-   - Event card shows invite counts (invited / going / pending)
-   - Detail panel shows full description, Modify Event, Add Invite form
-   - Create event via "+" FAB; AI description generate works
-   - Invite status dropdown (invited → accepted/declined) saves to Supabase
-   - "Close Event" button visible only to event creator
+   - Visibility badge (❤️ Family / 👥 Open / 🌐 Public) on event cards and detail panel
+   - Detail panel: Modify Event, invite list with RSVP (own invite highlighted), delete invites
+   - Add invite: typeahead from family members; no email required
+   - Create/Close/Delete event all use inline confirmation panels (no browser popups)
+   - `/events/:id` public route — correct ❤️/👥/🌐 banner; sign-in gate for family/open
 
 7. **Family Tree page** (`/family-tree`)
-   - Tree loads from Supabase (`family_trees` table) scoped to the active family
-   - Auto-saves with 800 ms debounce; "Saving…" indicator while pending
+   - Tree loads from `family_tree_nodes` flat table, scoped to active family
+   - Sidebar: Save → Add Child/Sibling (in that order); delete uses inline confirm
    - Expand/collapse, edit name/born, add child/sibling work
+   - "This is me" flag persists after navigating away and returning (BUG-004 fix)
+   - Multiple root nodes: all visible (second root attaches under primary — BUG-005 fix)
    - Switching families loads the new family's tree without page reload
 
 8. **AI generation**
@@ -143,8 +145,20 @@ Sign in with:
 ### Notes
 - Google OAuth cannot be automated — test manually
 - AI Edge Functions require `ANTHROPIC_API_KEY` set via `supabase secrets set`
-- Test families used: **NaatuPaakam** (has data), **Sharma Side** (tree only), **Empty Test Family** (blank)
 - `RESEND_API_KEY` is only needed for TC-AUTH-04; the app runs without it
+
+### Test data isolation
+
+All seed data lives in two **dedicated test families** created at run-start and deleted after:
+
+| Family | Purpose |
+|---|---|
+| **Test Family A** | Primary — all seed stories, events, tree nodes seeded here |
+| **Test Family B** | Secondary — for cross-family visibility and isolation tests |
+
+These are created via `create_family` RPC in `e2e/global-setup.ts` and their UUIDs stored in `.playwright/test-families.json`. Teardown calls `portal_delete_family` (cascade) per family — one call removes everything. No real families (NaatuPaakam, Sharma Side, etc.) are touched by tests.
+
+The `storageState` (`.playwright/auth.json`) pre-selects Test Family A as the active family so all tests start there without any additional sign-in or family-switch steps.
 
 ## Pre-push security gate (mandatory)
 
