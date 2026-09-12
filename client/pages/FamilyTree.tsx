@@ -37,19 +37,21 @@ function buildTree(nodes: FlatTreeNode[]): Member | null {
   if (!nodes.length) return null;
   const map = new Map(nodes.map(n => [n.id, { ...flatToMember(n), children: [] as Member[] }]));
   let root: Member | null = null;
+  const extraRoots: Member[] = []; // additional roots due to data anomaly
   const orphans: Member[] = [];
   const sorted = [...nodes].sort((a, b) => a.sort_order - b.sort_order);
   for (const n of sorted) {
     if (!n.parent_id) {
-      root = map.get(n.id)!;
+      if (!root) root = map.get(n.id)!;
+      else extraRoots.push(map.get(n.id)!); // subsequent roots attach under primary
     } else {
       const parent = map.get(n.parent_id);
       if (parent) parent.children!.push(map.get(n.id)!);
       else orphans.push(map.get(n.id)!); // parent was deleted — collect for rescue
     }
   }
-  // Attach orphaned nodes directly under root so no member silently disappears
-  if (root && orphans.length) root.children!.push(...orphans);
+  // Attach extra roots and orphans directly under primary root so nothing is hidden
+  if (root) root.children!.push(...extraRoots, ...orphans);
   return root;
 }
 
