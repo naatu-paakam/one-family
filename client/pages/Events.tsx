@@ -956,6 +956,11 @@ function EventDetail({
         {event.location && <span>• {event.location}</span>}
         <span>•</span>
         <Badge variant="secondary">{cat}</Badge>
+        {event.visibility && event.visibility !== "family" && (
+          <Badge variant="outline" className="text-[10px] px-1.5">
+            {event.visibility === "open" ? "👥 Open" : "🌐 Public"}
+          </Badge>
+        )}
       </div>
 
       {event.description && (
@@ -1069,6 +1074,7 @@ function ModifyEventForm({
   const [title, setTitle]       = useState(event.title);
   const [description, setDesc]  = useState(event.description ?? "");
   const [location, setLocation] = useState(event.location ?? "");
+  const [visibility, setVisibility] = useState<"family" | "open" | "public">(event.visibility ?? "family");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
@@ -1080,6 +1086,7 @@ function ModifyEventForm({
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
+        visibility,
       });
     } catch (err: any) {
       setError(err.message);
@@ -1112,6 +1119,28 @@ function ModifyEventForm({
         />
       </label>
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Visibility picker — compact chips, ADR-010 */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Who can see this event?</p>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: "family",  icon: "❤️", short: "to Family",   desc: "Visible to family members only" },
+            { value: "open",    icon: "👥", short: "All users",    desc: "Any registered user can read and RSVP" },
+            { value: "public",  icon: "🌐", short: "Public",       desc: "Anyone — shareable link, no login needed" },
+          ] as const).map(({ value, icon, short, desc }) => (
+            <button key={value} type="button" title={desc} onClick={() => setVisibility(value)}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                visibility === value
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}>
+              <span>{icon}</span><span>{short}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-2 flex gap-2">
         <Button onClick={handleSave} disabled={loading}>
           {loading && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
