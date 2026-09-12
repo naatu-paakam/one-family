@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -75,23 +75,20 @@ function TreeNode({
   searchMatches?: Set<string>;
   defaultExpanded?: boolean | null;
 }) {
-  // Determine initial expansion:
-  // 1. If focusNodeId is set: expand if this node is on the path to focus (so focus is visible),
-  //    OR if this node IS the focusNode (expand to show children = "1 below")
-  // 2. If searchMatches: expand if node is in matches (to show matches)
-  // 3. If defaultExpanded: use that value
-  // 4. Default: expand only root (depth === 0)
   const initExpanded = (() => {
-    if (focusNodeId && ancestorPath) {
-      // Expand if this node is on the ancestor path (which includes focusNode itself)
-      return ancestorPath.has(node.id);
-    }
-    if (searchMatches) return searchMatches.has(node.id);
+    // Explicit expand/collapse-all overrides everything else
     if (defaultExpanded !== null && defaultExpanded !== undefined) return defaultExpanded;
-    return depth === 0; // default: only root expanded
+    if (searchMatches) return searchMatches.has(node.id);
+    return true; // default: fully expanded (collapse-by-depth deferred post-MVP)
   })();
 
   const [expanded, setExpanded] = useState(initExpanded);
+
+  // When ancestorPath arrives after data loads, open any node on the path
+  // without collapsing the rest of the tree (no full remount needed).
+  useEffect(() => {
+    if (ancestorPath?.has(node.id)) setExpanded(true);
+  }, [ancestorPath, node.id]);
   const hasChildren = (node.children?.length ?? 0) > 0;
   const selected = selectedId === node.id;
   const isMe = !!currentUserId && node.userId === currentUserId;

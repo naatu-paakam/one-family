@@ -387,6 +387,7 @@ export type FlatTreeNode = {
   user_id: string | null
   partner_name: string | null
   partner_born: string | null
+  partner_user_id: string | null
   email: string | null
   phone: string | null
   address: string | null
