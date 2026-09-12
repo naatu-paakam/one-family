@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Sparkles } from "lucide-react";
+import { Loader2, Plus, Sparkles, Link2, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -48,6 +48,7 @@ type FamilyEvent = {
   closed_at: string | null;
   created_by: string;
   created_at: string;
+  visibility?: "family" | "open" | "public";
 };
 
 type Post = {
@@ -789,6 +790,43 @@ function CommentForm({
   );
 }
 
+/* ── EventCopyLinkButton ─────────────────────────────────────────────────────── */
+
+function EventCopyLinkButton({ eventId, visibility }: { eventId: string; visibility: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/events/${eventId}`;
+
+  const tooltip = visibility === "family"
+    ? "Copy link (family members need to sign in)"
+    : visibility === "open"
+    ? "Copy link (registered users can view)"
+    : "Copy public link";
+
+  // Show for all non-private events (events have no 'private' tier)
+  function handleCopy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={tooltip}
+      className={`rounded-full p-1.5 transition-colors ${
+        copied
+          ? "text-emerald-500 bg-emerald-50"
+          : visibility === "family"
+          ? "text-muted-foreground/40 hover:text-muted-foreground hover:bg-slate-100"
+          : "text-muted-foreground hover:text-foreground hover:bg-slate-100"
+      }`}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 /* ── EventCard — going / pending / invited counts ───────────────────────────── */
 
 function EventCard({
@@ -906,7 +944,11 @@ function EventDetail({
 
   return (
     <div>
-      <div className="text-sm text-muted-foreground">Selected event</div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">Selected event</div>
+        {/* Copy link — not shown for private (family-only) events that require membership */}
+        <EventCopyLinkButton eventId={event.id} visibility={event.visibility ?? "family"} />
+      </div>
       <div className="mt-1 text-lg font-bold">{event.title}</div>
       <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-1">
         <span>{fmtDate(event.started_at ?? event.created_at)}</span>
