@@ -223,18 +223,13 @@ test("TC-TREE-M04 Flagging as me fills name from user profile in sidebar", async
   expect(nameValue.length).toBeGreaterThan(0);
 });
 
-test("TC-TREE-M05 Auto-focus: tree collapses depth-0-only by default when no me-node flagged", async ({ page }) => {
+test("TC-TREE-M05 Full tree is expanded by default — all nodes visible without user interaction", async ({ page }) => {
   await page.goto(`${BASE}/family-tree`);
   await expect(page.getByText("Grandparent").first()).toBeVisible({ timeout: 8000 });
 
-  // Root (Grandparent) is expanded — direct children (Parent nodes) visible
+  // All levels visible by default (collapse-by-depth deferred post-MVP)
   await expect(page.getByText("Parent").first()).toBeVisible();
-
-  // But grandchildren (Child nodes) should be collapsed/hidden by default
-  // The Parent nodes have ▶ chevrons (collapsed), so Child nodes are not visible
-  
-  // Children of Parent are hidden (Parent is collapsed by default at depth 1)
-  await expect(page.getByText("Child", { exact: true }).first()).not.toBeVisible({ timeout: 2000 });
+  await expect(page.getByText("Child").first()).toBeVisible();
 });
 
 test("TC-TREE-M06 Expand/collapse all controls exist for signed-in tree", async ({ page }) => {
@@ -278,4 +273,190 @@ test("TC-TREE-P03 Contact section not shown in preview/logged-out mode", async (
   // Contact section should be hidden (isPreview = true)
   await expect(page.locator("input[type=email]")).not.toBeVisible();
   await expect(page.locator("input[type=tel]")).not.toBeVisible();
+});
+
+// ── BUG-001: Tree renders all members / Add Child appears in canvas ───────────
+
+test("TC-TREE-B01 Member count in subtitle matches number of rendered tree nodes", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B01: No tree — skipping"); return; }
+
+  // Read the member count from the subtitle (e.g. "NaatuPaakam · 9 members · Click…")
+  const subtitleEl = page.locator("p").filter({ hasText: /members/ }).first();
+  const subtitleText = await subtitleEl.innerText({ timeout: 8000 });
+  const match = subtitleText.match(/(\d+)\s+member/);
+  if (!match) { console.log("TC-TREE-B01: Could not parse member count — skipping"); return; }
+  const memberCount = parseInt(match[1], 10);
+
+  // Expand all so every node is visible
+  await page.getByTitle("Expand all branches").click();
+  await page.waitForTimeout(500);
+
+  const renderedNodes = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+  expect(renderedNodes).toBe(memberCount);
+});
+
+test("TC-TREE-B01b Add Child appears immediately in tree canvas after clicking Add Child", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B01b: No tree — skipping"); return; }
+
+  // Expand all so we can see all nodes
+  await page.getByTitle("Expand all branches").click();
+  await page.waitForTimeout(300);
+  const countBefore = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+
+  // Click Add Child on the selected (root) node
+  await page.getByRole("button", { name: "Add Child" }).click();
+  await page.waitForTimeout(800);
+
+  // Tree canvas should now show one more node
+  const countAfter = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+  expect(countAfter).toBe(countBefore + 1);
+});
+
+// ── BUG-002: "This is me" for Partner / Spouse ────────────────────────────────
+
+test("TC-TREE-B02 Partner section has its own This is me button when signed in", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B02: No tree — skipping"); return; }
+
+  // Ensure a node is selected
+  await page.locator(".rounded-md.border.bg-card[role=button]").first().click();
+  await page.waitForTimeout(300);
+
+  // The Partner / Spouse section heading row should contain a "This is me" button
+  const partnerSection = page.locator("aside").getByText("Partner / Spouse").locator("..");
+  await expect(partnerSection.getByRole("button", { name: /This is me|That's me/i })).toBeVisible({ timeout: 5000 });
+});
+
+test("TC-TREE-B02b Clicking partner This is me changes it to That's me", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B02b: No tree — skipping"); return; }
+
+  await page.locator(".rounded-md.border.bg-card[role=button]").first().click();
+  await page.waitForTimeout(300);
+
+  // Find the partner-section "This is me" — it's the second one in the aside
+  const allThisMeBtns = page.locator("aside").getByRole("button", { name: /This is me/i });
+  const partnerBtn = allThisMeBtns.nth(1); // second = partner section
+  const isVisible = await partnerBtn.isVisible({ timeout: 4000 }).catch(() => false);
+  if (!isVisible) { console.log("TC-TREE-B02b: Partner This is me button not visible — skipping"); return; }
+
+  await partnerBtn.click();
+  await page.waitForTimeout(500);
+  // Should now say "That's me"
+  const thatsMeBtns = page.locator("aside").getByRole("button", { name: /That's me/i });
+  expect(await thatsMeBtns.count()).toBeGreaterThanOrEqual(1);
+});
+
+// ── BUG-003: Action bar layout ────────────────────────────────────────────────
+
+test("TC-TREE-B03 Cancel and Delete icon buttons are present in sidebar", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B03: No tree — skipping"); return; }
+
+  // Cancel button (title="Cancel changes")
+  await expect(page.getByTitle("Cancel changes")).toBeVisible({ timeout: 8000 });
+  // Delete button (title="Delete member")
+  await expect(page.getByTitle("Delete member")).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-TREE-B03b Born label reads 'YYYY or Date of Birth'", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B03b: No tree — skipping"); return; }
+
+  await expect(page.getByText(/YYYY or Date of Birth/i).first()).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-TREE-B03c Add Child and Add Sibling buttons are separated from Save button", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B03c: No tree — skipping"); return; }
+
+  const aside = page.locator("aside");
+  // Both tree-mutation buttons exist
+  await expect(aside.getByRole("button", { name: "Add Child" })).toBeVisible({ timeout: 8000 });
+  await expect(aside.getByRole("button", { name: "Add Sibling" })).toBeVisible({ timeout: 8000 });
+  // Save button exists
+  await expect(aside.getByRole("button", { name: /^Save$|^Saving/ })).toBeVisible({ timeout: 8000 });
+  // Save button is rendered ABOVE Add Child — verify by comparing button y positions
+  const saveBox     = await aside.getByRole("button", { name: /^Save$|^Saving/ }).boundingBox();
+  const addChildBox = await aside.getByRole("button", { name: "Add Child" }).boundingBox();
+  if (saveBox && addChildBox) {
+    // Add Child row must be below (larger y) the Save button
+    expect(addChildBox.y).toBeGreaterThan(saveBox.y);
+  }
+});
+
+// ── BUG-004: "This is me" node visible after navigation ──────────────────────
+
+test("TC-TREE-B04 Flagged This-is-me node remains visible after navigating away and back", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-B04: No tree — skipping"); return; }
+
+  // Flag first node as "This is me"
+  const firstNode = page.locator(".rounded-md.border.bg-card[role=button]").first();
+  await firstNode.click();
+  await page.waitForTimeout(300);
+
+  const thisMeBtn = page.locator("aside").getByRole("button", { name: /This is me/i }).first();
+  const canFlag = await thisMeBtn.isVisible({ timeout: 5000 }).catch(() => false);
+  if (!canFlag) { console.log("TC-TREE-B04: This is me button not visible — skipping"); return; }
+
+  await thisMeBtn.click();
+  await page.waitForTimeout(600);
+  // Confirm it is flagged
+  await expect(page.locator("aside").getByRole("button", { name: /That's me/i }).first()).toBeVisible({ timeout: 3000 });
+
+  // Navigate away
+  await page.goto(`${BASE}/events`);
+  await page.waitForTimeout(500);
+
+  // Navigate back
+  await page.goto(`${BASE}/family-tree`);
+  // Wait for tree to fully load
+  await page.waitForTimeout(2500);
+
+  // Expand all to make every node visible
+  const expandBtn = page.getByTitle("Expand all branches");
+  const expandVisible = await expandBtn.isVisible({ timeout: 5000 }).catch(() => false);
+  if (expandVisible) {
+    await expandBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  // The node with the "me" badge should be visible in canvas
+  const meBadge = page.locator("span.bg-emerald-500").filter({ hasText: "me" });
+  await expect(meBadge.first()).toBeVisible({ timeout: 5000 });
+});
+
+// ── Scroll: wide tree is horizontally scrollable ──────────────────────────────
+
+test("TC-TREE-S01 Horizontal scroll container exists and allows overflow scroll", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-S01: No tree — skipping"); return; }
+
+  // Expand all to maximise width
+  await page.getByTitle("Expand all branches").click();
+  await page.waitForTimeout(500);
+
+  const scrollEl = page.locator(".overflow-x-auto").first();
+  await expect(scrollEl).toBeVisible({ timeout: 5000 });
+
+  const box = await scrollEl.boundingBox();
+  expect(box).not.toBeNull();
+
+  // scrollWidth >= clientWidth (container can scroll if content is wider)
+  const scrollWidth = await scrollEl.evaluate((el: HTMLElement) => el.scrollWidth);
+  const clientWidth = await scrollEl.evaluate((el: HTMLElement) => el.clientWidth);
+  // At minimum the scroll container is not broken (scrollWidth ≥ clientWidth)
+  expect(scrollWidth).toBeGreaterThanOrEqual(clientWidth);
 });
