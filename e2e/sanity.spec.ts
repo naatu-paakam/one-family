@@ -45,7 +45,6 @@ test("TC-01 Home page renders hero and nav when logged out", async ({ page }) =>
 
   // Header CTAs
   await expect(page.locator("header").getByRole("link", { name: /Why Family Vibes/i })).toBeVisible();
-  await expect(page.locator("header").getByRole("link", { name: /Plan for Event/i })).toBeVisible();
   await expect(page.getByRole("button", { name: "Join Family" })).toBeVisible();
 
   // Hero headline

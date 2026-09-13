@@ -51,8 +51,8 @@ test("E2E-HOME-01 Logged-out home: hero, CTAs, sample tree preview, feature card
   // Hero
   await expect(page.getByRole("heading", { name: /Your family's home/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Start your family space/i })).toBeVisible();
-  // Plan for Event — scope to header to avoid hero duplicate
-  await expect(page.locator("header").getByRole("link", { name: /Plan for Event/i })).toBeVisible();
+  // Plan for Event CTA is on the hero (main), not in the header
+  await expect(page.locator("main").getByRole("link", { name: /Plan for Event/i })).toBeVisible();
 
   // Sample family tree preview renders on home page
   await expect(page.locator("main").getByText("Family Tree").first()).toBeVisible();
@@ -230,14 +230,12 @@ test("E2E-EVENTS-01 Events page: heading, search, all tabs, create button", asyn
   await expect(page.getByRole("button", { name: /New Event/i })).toBeVisible();
 });
 
-test("E2E-EVENTS-02 Plan for Event header link opens create form with visibility picker", async ({ page }) => {
+test("E2E-EVENTS-02 Navigating to /events?create=1 opens create form with visibility picker", async ({ page }) => {
   await signIn(page);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
-  await page.locator("header").getByRole("link", { name: /Plan for Event/i }).click();
-  await expect(page.getByText("Who can see this event?")).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText("Family only")).toBeVisible();
-  await expect(page.getByText("Registered users")).toBeVisible();
-  await expect(page.getByText("Public").first()).toBeVisible();
+  await page.goto(`${BASE}/events?create=1`);
+  await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("button", { name: "❤️ Family", exact: true })).toBeVisible();
 });
 
 test("E2E-EVENTS-03 Events tab switching does not crash", async ({ page }) => {

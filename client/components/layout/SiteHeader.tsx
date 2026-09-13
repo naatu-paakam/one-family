@@ -228,11 +228,6 @@ export default function SiteHeader() {
             <Button asChild variant="ghost" size="sm" aria-label="Why Family Vibes" className="hidden sm:inline-flex text-rose-600 hover:text-rose-700 hover:bg-rose-50">
               <Link to="/why-family-vibes">Why Family Vibes?</Link>
             </Button>
-            {/* "Plan for Event" — always visible, opens create form on Events page */}
-            <Button asChild variant="outline" size="sm" aria-label="Plan for Event">
-              <Link to="/events?create=1">Plan for Event</Link>
-            </Button>
-
             {session ? (
               <>
                 <FamilyMenu />

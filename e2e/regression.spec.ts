@@ -67,10 +67,10 @@ test("TC-NAV-02 All header nav links navigate to correct routes", async ({ page 
   await expect(page).toHaveURL(BASE + "/");
 });
 
-test("TC-NAV-03 Plan for Event header link opens events page with create flag", async ({ page }) => {
-  await page.goto(BASE);
-  await page.locator("header").getByRole("link", { name: /Plan for Event/i }).click();
+test("TC-NAV-03 Events page loads via direct navigation", async ({ page }) => {
+  await page.goto(`${BASE}/events`);
   await expect(page).toHaveURL(/\/events/);
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({ timeout: 8000 });
 });
 
 test("TC-NAV-04 Unknown route renders 404 page", async ({ page }) => {
@@ -295,11 +295,12 @@ test("TC-EVENTS-04 Tab switching does not crash the page", async ({ page }) => {
   }
 });
 
-test("TC-EVENTS-05 Plan for Event header link opens events with create intent", async ({ page }) => {
+test("TC-EVENTS-05 Navigating to /events?create=1 opens create form", async ({ page }) => {
   await signIn(page);
-  await page.locator("header").getByRole("link", { name: /Plan for Event/i }).click();
+  await page.goto(`${BASE}/events?create=1`);
   await expect(page).toHaveURL(/\/events/);
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByText("Create event")).toBeVisible({ timeout: 8000 });
 });
 
 // ---------------------------------------------------------------------------

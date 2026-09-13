@@ -87,9 +87,8 @@ test("TC-VIS-04 Drafts tab shows 🔒 Private badge on stories", async ({ page }
 
 test("TC-VIS-05 Event creation form shows visibility picker with 3 options", async ({ page }) => {
   await signIn(page);
-  // Use SPA navigation via header "Plan for Event" link (avoids full page reload / auth race)
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
-  await page.locator("header").getByRole("link", { name: /Plan for Event/i }).click();
+  await page.goto(`${BASE}/events?create=1`);
   await expect(page).toHaveURL(/\/events/);
   await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 10000 });
 
@@ -102,7 +101,7 @@ test("TC-VIS-05 Event creation form shows visibility picker with 3 options", asy
 test("TC-VIS-06 Family only is selected by default in new event form", async ({ page }) => {
   await signIn(page);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
-  await page.locator("header").getByRole("link", { name: /Plan for Event/i }).click();
+  await page.goto(`${BASE}/events?create=1`);
   await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 10000 });
 
   // "Family" chip visible as the default option
