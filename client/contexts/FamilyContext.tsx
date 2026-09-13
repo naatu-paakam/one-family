@@ -32,7 +32,8 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   const { session, isPortalAdmin } = useAuth()
   const [families, setFamilies] = useState<Family[]>([])
   const [activeFamilyId, setActiveFamilyIdState] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Start as loading=true so pages don't flash a no-family redirect before first fetch
+  const [loading, setLoading] = useState(true)
 
   const load = async () => {
     if (!session) { setFamilies([]); setActiveFamilyIdState(null); return }

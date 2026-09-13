@@ -13,7 +13,7 @@ import { useFamily } from "@/contexts/FamilyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserCheck, Search, ChevronsDownUp, ChevronsUpDown, X, Trash2 } from "lucide-react";
 import {
-  fetchFamilyTreeNodes, upsertTreeNode, deleteTreeNode,
+  fetchFamilyTreeNodes, upsertTreeNode, deleteTreeNode, updateTreeNodeParent,
   type FlatTreeNode,
 } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +186,35 @@ export default function FamilyTreePage() {
       setTreeKey(k => k + 1); // remount so new child is visible in expanded parent
     } catch (e: any) {
       toast({ title: "Failed to add child", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const addParent = async () => {
+    if (!selected || !activeFamilyId) return;
+    if (selected.parent_id !== null) return; // only for root nodes
+    setSaving(true);
+    try {
+      // Step 1: create new node as the new root (parent_id = null)
+      const newRoot = await upsertTreeNode({
+        id: crypto.randomUUID(),
+        family_id: activeFamilyId,
+        parent_id: null,
+        name: "New Parent",
+        sort_order: 0,
+      });
+      // Step 2: make the current root a child of the new root
+      await updateTreeNodeParent(selected.id, newRoot.id, 0);
+      // Step 3: update local state
+      setNodes(prev => [
+        ...prev.filter(n => n.id !== selected.id),
+        { ...prev.find(n => n.id === selected.id)!, parent_id: newRoot.id },
+        newRoot,
+      ]);
+      setSelectedId(newRoot.id);
+      setTreeKey(k => k + 1); // remount so new root is rendered at top
+      toast({ title: "Parent added", description: "New parent node added above the root." });
+    } catch (e: any) {
+      toast({ title: "Failed to add parent", description: e.message, variant: "destructive" });
     } finally { setSaving(false); }
   };
 
@@ -365,6 +394,8 @@ export default function FamilyTreePage() {
   }
 
   const canAddSibling = !isPreview && !!selected?.parent_id;
+  // Add Parent only on root nodes (no parent) — grows the tree upward
+  const canAddParent  = !isPreview && selected?.parent_id === null;
 
   // Member to display in sidebar (uses Member type for partner display)
   const selectedMember = tree ? (() => {
@@ -569,7 +600,12 @@ export default function FamilyTreePage() {
 
             {/* Tree-mutation actions — below Save row */}
             {!isPreview && !deleteConfirmName && (
-              <div className="border-t pt-3 flex gap-2">
+              <div className="border-t pt-3 flex flex-wrap gap-2">
+                {canAddParent && (
+                  <Button variant="outline" size="sm" disabled={saving} onClick={() => requireAuth(addParent)}>
+                    Add Parent
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" disabled={saving} onClick={() => requireAuth(addChild)}>
                   Add Child
                 </Button>

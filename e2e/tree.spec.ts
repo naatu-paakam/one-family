@@ -155,6 +155,78 @@ test("TC-TREE-N04 Add Child navigates to new node in sidebar", async ({ page }) 
   await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
+test("TC-TREE-N05 Add Parent button visible only on root node; clicking adds a new root above", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-N05: No tree — skipping"); return; }
+
+  const aside = page.locator("aside");
+
+  // Select the root node (first in the list)
+  await page.locator(".rounded-md.border.bg-card[role=button]").first().click();
+  await page.waitForTimeout(300);
+
+  // "Add Parent" should appear in the action bar for root nodes
+  const addParentBtn = aside.getByRole("button", { name: "Add Parent" });
+  const hasParentBtn = await addParentBtn.isVisible({ timeout: 5000 }).catch(() => false);
+  if (!hasParentBtn) {
+    console.log("TC-TREE-N05: selected node is not root or Add Parent not visible — skipping");
+    return;
+  }
+  await expect(addParentBtn).toBeVisible();
+
+  // Count nodes before
+  const countBefore = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+
+  // Click Add Parent
+  await addParentBtn.click();
+  await page.waitForTimeout(1000);
+
+  // A new root node (New Parent) should appear
+  const countAfter = await page.locator(".rounded-md.border.bg-card[role=button]").count();
+  expect(countAfter).toBeGreaterThan(countBefore);
+
+  // Sidebar should now show "New Parent" as selected (the newly created root)
+  await expect(aside.getByText("New Parent")).toBeVisible({ timeout: 5000 });
+
+  // The "Add Parent" button should now be visible for the new root too
+  await expect(addParentBtn).toBeVisible();
+
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+});
+
+// ── Verify Add Parent hidden on non-root nodes ────────────────────────────────
+
+test("TC-TREE-N06 Add Parent is hidden when selected node has a parent", async ({ page }) => {
+  await goToTree(page);
+  const hasTree = await page.getByRole("heading", { name: "Family Tree" }).isVisible({ timeout: 12000 }).catch(() => false);
+  if (!hasTree) { console.log("TC-TREE-N06: No tree — skipping"); return; }
+
+  const aside = page.locator("aside");
+
+  // Expand tree to see child nodes, then click a non-root node
+  const expandBtn = page.getByTitle("Expand all branches");
+  if (await expandBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await expandBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  const nodes = page.locator(".rounded-md.border.bg-card[role=button]");
+  const total = await nodes.count();
+  if (total < 2) { console.log("TC-TREE-N06: Only root node — skipping"); return; }
+
+  // Click the second node (a child of root, not a root)
+  await nodes.nth(1).click();
+  await page.waitForTimeout(300);
+
+  // "Add Parent" must NOT be visible for non-root nodes
+  const addParentBtn = aside.getByRole("button", { name: "Add Parent" });
+  await expect(addParentBtn).not.toBeVisible({ timeout: 2000 });
+
+  // Add Child and Add Sibling should still be visible
+  await expect(aside.getByRole("button", { name: "Add Child" })).toBeVisible({ timeout: 3000 });
+});
+
 // ── "This is me" feature ──────────────────────────────────────────────────────
 
 test("TC-TREE-M01 This is me button visible — seed root node selected", async ({ page }) => {
