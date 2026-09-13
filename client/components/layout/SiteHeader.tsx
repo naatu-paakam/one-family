@@ -205,7 +205,7 @@ export default function SiteHeader() {
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-1.5">
             <img src="/logo.svg" alt="Family Vibes" className="h-10 w-10 rounded-lg" />
-            <span className="font-extrabold tracking-tight text-xl">Family Vibes</span>
+            <span className="font-extrabold tracking-tight text-xl whitespace-nowrap">Family Vibes</span>
           </Link>
           {session && activeFamily && (
             <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-3 py-1 rounded-full text-sm font-semibold bg-gradient-to-r from-rose-100 via-pink-100 to-red-100 text-rose-700 border border-rose-200 shadow-sm">
