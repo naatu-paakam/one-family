@@ -167,7 +167,7 @@ export default function Index() {
                 {session && (
                   <>
                     <Button asChild size="lg" variant="outline">
-                      <Link to="/stories">Start a Blog</Link>
+                      <Link to="/stories">Start a Story</Link>
                     </Button>
                     <Button asChild size="lg" variant="outline">
                       <Link to="/family-tree">Build Family Tree</Link>

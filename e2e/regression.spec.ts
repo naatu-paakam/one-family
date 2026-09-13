@@ -115,23 +115,23 @@ test("TC-NAV-07 Signed-in header shows avatar, family menu, and family badge", a
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible();
 });
 
-test("TC-NAV-08 Avatar dropdown shows user name, New Post, Sign Out", async ({ page }) => {
+test("TC-NAV-08 Avatar dropdown shows user name, New Story, Sign Out", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
 
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /New Post/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /New Story/i })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /Sign Out/i })).toBeVisible();
 
   // Close without signing out
   await page.keyboard.press("Escape");
 });
 
-test("TC-NAV-09 New Post menu item navigates to Stories page", async ({ page }) => {
+test("TC-NAV-09 New Story menu item navigates to Stories page", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
-  await page.getByRole("menuitem", { name: /New Post/i }).click();
+  await page.getByRole("menuitem", { name: /New Story/i }).click();
   await expect(page).toHaveURL(/\/stories/);
 });
 
@@ -145,9 +145,9 @@ test("TC-HOME-01 Home hero heading and signed-in CTAs render when signed in", as
 
   await expect(main.getByRole("heading", { name: /Your family's home/i })).toBeVisible();
 
-  // Signed-in hero CTA links (Start a Blog and Build Family Tree are signed-in only)
+  // Signed-in hero CTA links (Start a Story and Build Family Tree are signed-in only)
   await expect(main.getByRole("link", { name: /Plan for Event/i })).toBeVisible();
-  await expect(main.getByRole("link", { name: /Start a Blog/i })).toBeVisible();
+  await expect(main.getByRole("link", { name: /Start a Story/i })).toBeVisible();
   await expect(main.getByRole("link", { name: /Build Family Tree/i })).toBeVisible();
   // "Start your family space" button must NOT appear when signed in
   await expect(main.getByRole("button", { name: /Start your family space/i })).not.toBeVisible();
@@ -162,7 +162,7 @@ test("TC-HOME-01b Home hero shows Start your family space CTA when logged out", 
   await expect(main.getByRole("button", { name: /Start your family space/i })).toBeVisible();
   await expect(main.getByRole("link", { name: /Plan for Event/i })).toBeVisible();
   // Signed-in-only buttons must NOT appear
-  await expect(main.getByRole("link", { name: /Start a Blog/i })).not.toBeVisible();
+  await expect(main.getByRole("link", { name: /Start a Story/i })).not.toBeVisible();
   await expect(main.getByRole("link", { name: /Build Family Tree/i })).not.toBeVisible();
 });
 
@@ -224,10 +224,10 @@ test("TC-STORIES-01 Stories page heading, search box, and tabs render", async ({
   await expect(page.getByRole("tab", { name: "Drafts" })).toBeVisible();
 });
 
-test("TC-STORIES-02 New Post button visible when signed in", async ({ page }) => {
+test("TC-STORIES-02 New Story button visible when signed in", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/stories`);
-  await expect(page.getByRole("button", { name: "New Post" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Story" })).toBeVisible();
 });
 
 test("TC-STORIES-03 Detail panel shows placeholder when no post selected", async ({ page }) => {

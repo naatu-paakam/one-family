@@ -84,7 +84,7 @@ test("E2E-HOME-03 Logged-in: hero CTAs, stat cards, AI snapshot, family badge", 
   const main = page.locator("main");
 
   await expect(main.getByRole("link", { name: /Plan for Event/i })).toBeVisible();
-  await expect(main.getByRole("link", { name: /Start a Blog/i })).toBeVisible();
+  await expect(main.getByRole("link", { name: /Start a Story/i })).toBeVisible();
   await expect(main.getByRole("link", { name: /Build Family Tree/i })).toBeVisible();
 
   // Stat cards
@@ -105,9 +105,9 @@ test("E2E-HOME-04 Logged-in: Plan for Event CTA navigates to events", async ({ p
   await expect(page).toHaveURL(/\/events/);
 });
 
-test("E2E-HOME-05 Logged-in: Start a Blog navigates to stories", async ({ page }) => {
+test("E2E-HOME-05 Logged-in: Start a Story navigates to stories", async ({ page }) => {
   await signIn(page);
-  await page.locator("main").getByRole("link", { name: /Start a Blog/i }).click();
+  await page.locator("main").getByRole("link", { name: /Start a Story/i }).click();
   await expect(page).toHaveURL(/\/stories/);
 });
 
@@ -175,12 +175,12 @@ test("E2E-STORIES-01 Stories page: heading, search, tabs, detail panel", async (
   await expect(page.locator("aside, [role=complementary]").first()).toContainText(/Select a post/i);
 });
 
-test("E2E-STORIES-02 New Post button opens editor with visibility picker", async ({ page }) => {
+test("E2E-STORIES-02 New Story button opens editor with visibility picker", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/stories`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  await page.locator("main").getByRole("button", { name: "New Post" }).first().click();
+  await page.locator("main").getByRole("button", { name: "New Story" }).first().click();
   await expect(page.getByText("Visibility")).toBeVisible({ timeout: 5000 });
   // All 4 compact visibility chips shown
   await expect(page.getByText("Private to you")).toBeVisible();
@@ -495,12 +495,12 @@ test("E2E-WHY-02 Why Family Vibes: See it live navigates to home", async ({ page
 // ── AVATAR DROPDOWN (signed-in)
 // ── ═══════════════════════════════════════════════════════════════════════════
 
-test("E2E-AVATAR-01 Avatar dropdown: New Post, Family Settings, Portal Admin, Sign Out", async ({ page }) => {
+test("E2E-AVATAR-01 Avatar dropdown: New Story, Family Settings, Portal Admin, Sign Out", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /New Post/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /New Story/i })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /Family Settings/i })).toBeVisible();
   // Portal Admin shows for portal admin test user
   const hasPortal = await menu.getByRole("menuitem", { name: /Portal Admin/i }).isVisible().catch(() => false);
@@ -509,10 +509,10 @@ test("E2E-AVATAR-01 Avatar dropdown: New Post, Family Settings, Portal Admin, Si
   await page.keyboard.press("Escape");
 });
 
-test("E2E-AVATAR-02 New Post from dropdown navigates to stories", async ({ page }) => {
+test("E2E-AVATAR-02 New Story from dropdown navigates to stories", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
-  await page.getByRole("menuitem", { name: /New Post/i }).click();
+  await page.getByRole("menuitem", { name: /New Story/i }).click();
   await expect(page).toHaveURL(/\/stories/);
 });
 

@@ -244,10 +244,10 @@ export default function SiteHeader() {
                     <div className="px-2 py-1.5 text-sm font-medium truncate">{displayName}</div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link to="/stories" className="gap-2"><PenSquare className="h-4 w-4" /> New Post</Link>
+                      <Link to="/stories" className="gap-2"><PenSquare className="h-4 w-4" /> New Story</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2 sm:hidden" onClick={() => setShowCreateEvent(true)}>
-                      <CalendarPlus className="h-4 w-4" /> Create Event
+                    <DropdownMenuItem asChild>
+                      <Link to="/events?create=1" className="gap-2"><CalendarPlus className="h-4 w-4" /> Plan for Event</Link>
                     </DropdownMenuItem>
                     {/* [ROLE: family-admin] */}
                     {isFamilyAdmin && (
