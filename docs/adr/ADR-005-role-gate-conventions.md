@@ -2,13 +2,14 @@
 
 **Status:** Accepted  
 **Date:** 2026-09-08  
+**Updated:** 2026-09-13 — `isFamilyAdmin` no longer includes `isPortalAdmin`  
 **Deciders:** Pavan Kumar Bijjala
 
 ---
 
 ## Context
 
-Without a clear convention, role checks will be scattered across components as ad-hoc string comparisons (`activeFamily?.role === 'admin'`), making it easy to miss a gate, use the wrong condition, or forget to account for portal admins who should inherit all family admin rights.
+Without a clear convention, role checks will be scattered across components as ad-hoc string comparisons (`activeFamily?.role === 'admin'`), making it easy to miss a gate or use the wrong condition.
 
 ## Decision
 
@@ -18,14 +19,16 @@ Always use context helpers — never raw field comparisons in components:
 
 ```ts
 // In any component:
-const { isFamilyAdmin } = useFamily();   // true if role='admin' OR isPortalAdmin
+const { isFamilyAdmin } = useFamily();   // true only if role='admin' in active family
 const { isPortalAdmin } = useAuth();     // true if profiles.is_portal_admin = true
 const { session } = useAuth();           // truthy if any user is signed in
 ```
 
+**`isFamilyAdmin` does NOT include `isPortalAdmin`.** A portal admin visiting a family where they are a plain member sees member UI. Portal-level operations (e.g. rename any family, delete any member) go through `/portal`, not family admin UI. This prevents portal admins from seeing family admin controls they didn't earn via the invite/promote flow.
+
 **Never write in a component:**
 ```ts
-// BAD — misses portal admin, fragile
+// BAD — fragile, ignores proper role abstraction
 activeFamily?.role === 'admin'
 profile?.is_admin
 profile?.is_portal_admin   // only use directly inside AuthContext itself

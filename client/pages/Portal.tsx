@@ -305,6 +305,11 @@ function UsersTab() {
                   {isSelf && <Badge variant="outline" className="text-xs">You</Badge>}
                 </div>
 
+                {/* Email */}
+                {p.email && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{p.email}</p>
+                )}
+
                 {/* Family admin badges */}
                 {familyAdminOf.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">

@@ -495,25 +495,31 @@ test("E2E-WHY-02 Why Family Vibes: See it live navigates to home", async ({ page
 // ── AVATAR DROPDOWN (signed-in)
 // ── ═══════════════════════════════════════════════════════════════════════════
 
-test("E2E-AVATAR-01 Avatar dropdown: New Story, Family Settings, Portal Admin, Sign Out", async ({ page }) => {
+test("E2E-AVATAR-01 Avatar dropdown contains all expected items in correct order", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
+  // Create actions (top group)
   await expect(menu.getByRole("menuitem", { name: /New Story/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Plan for Event/i })).toBeVisible();
+  // View actions (second group)
+  await expect(menu.getByRole("menuitem", { name: /View Stories/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /View Events/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /View Family Tree/i })).toBeVisible();
+  // Settings + sign out
   await expect(menu.getByRole("menuitem", { name: /Family Settings/i })).toBeVisible();
-  // Portal Admin shows for portal admin test user
-  const hasPortal = await menu.getByRole("menuitem", { name: /Portal Admin/i }).isVisible().catch(() => false);
-  if (hasPortal) await expect(menu.getByRole("menuitem", { name: /Portal Admin/i })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /Sign Out/i })).toBeVisible();
   await page.keyboard.press("Escape");
 });
 
-test("E2E-AVATAR-02 New Story from dropdown navigates to stories", async ({ page }) => {
+test("E2E-AVATAR-02 New Story from dropdown auto-opens creation form", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
   await page.getByRole("menuitem", { name: /New Story/i }).click();
   await expect(page).toHaveURL(/\/stories/);
+  // Auto-open: visibility picker visible immediately
+  await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 8000 });
 });
 
 test("E2E-AVATAR-03 Family Settings from dropdown navigates correctly", async ({ page }) => {

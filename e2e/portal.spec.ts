@@ -259,6 +259,23 @@ test("TC-PORTAL-USERS-06 Delete (trash) button present on non-self user rows", a
 
 // ── TC-PORTAL-INTEGRITY: Portal page no JS crash ─────────────────────────────
 
+// ── TC-PORTAL-USERS-07: E2E test users filtered from user list ─────────────
+
+test("TC-PORTAL-USERS-07 Portal user list does not contain e2e- test accounts", async ({ page }) => {
+  await goToPortal(page);
+  await page.getByRole("button", { name: /^users$/i }).click();
+  await expect(page.locator("main")).toBeVisible({ timeout: 8000 });
+
+  // Allow list to load
+  await page.waitForTimeout(1500);
+
+  // No e2e-reg- email should appear in the user list
+  const e2eVisible = await page.getByText(/e2e-reg-/i).isVisible({ timeout: 2000 }).catch(() => false);
+  expect(e2eVisible).toBe(false);
+});
+
+// ── TC-PORTAL-INTEGRITY: Portal page no JS crash ─────────────────────────────
+
 test("TC-PORTAL-INTEGRITY Portal page renders without JS crash on both tabs", async ({ page }) => {
   await goToPortal(page);
 

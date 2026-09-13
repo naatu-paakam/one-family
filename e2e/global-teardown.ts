@@ -86,6 +86,22 @@ async function globalTeardown() {
   await del("updates", `author_id=eq.${userId}&title=eq.New+Post`,        jwt);
   console.log("[global-teardown] ✓ Deleted orphan test stories");
 
+  // ── 3. E2E test users (e2e-reg-*@naatupakam.family) ──────────────────────────
+  // Note: portal_fetch_profiles now filters these out for the portal UI,
+  // but we need to find and delete them in teardown via a dedicated RPC.
+  const e2eResp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/portal_fetch_e2e_user_ids`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (e2eResp.ok) {
+    const e2eIds = await e2eResp.json() as string[];
+    for (const id of e2eIds) {
+      await rpc("portal_delete_user", { p_user_id: id }, jwt);
+    }
+    if (e2eIds.length) console.log(`[global-teardown] ✓ Deleted ${e2eIds.length} E2E test user(s)`);
+  }
+
   console.log("[global-teardown] ✓ Teardown complete");
 }
 

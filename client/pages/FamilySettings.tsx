@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Copy, Check, RefreshCw, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamily } from "@/contexts/FamilyContext";
 import {
@@ -25,6 +26,7 @@ import {
   updateFamilyVisibility,
   joinFamilyByCode,
   createFamily,
+  removeFamilyMember,
 } from "@/lib/supabase";
 import { format } from "date-fns";
 
@@ -78,7 +80,7 @@ export default function FamilySettings() {
           </div>
 
           {tab === "general" && <GeneralTab family={activeFamily} isFamilyAdmin={isFamilyAdmin} onSaved={reload} />}
-          {tab === "members" && <MembersTab familyId={activeFamily.id} isFamilyAdmin={isFamilyAdmin} />}
+          {tab === "members" && <MembersTab familyId={activeFamily.id} isFamilyAdmin={isFamilyAdmin} currentUserId={session?.user?.id} />}
           {tab === "bio" && <BioTab family={activeFamily} isFamilyAdmin={isFamilyAdmin} onSaved={reload} />}
           {/* [ROLE: family-admin] — invites tab only shown to admins */}
           {tab === "invites" && isFamilyAdmin && <InvitesTab family={activeFamily} onRotated={reload} />}
@@ -155,15 +157,37 @@ function GeneralTab({ family, isFamilyAdmin, onSaved }: { family: any; isFamilyA
 
 // ── Members tab ───────────────────────────────────────────────────────────────
 
-function MembersTab({ familyId, isFamilyAdmin }: { familyId: string; isFamilyAdmin: boolean }) {
+function MembersTab({ familyId, isFamilyAdmin, currentUserId }: {
+  familyId: string;
+  isFamilyAdmin: boolean;
+  currentUserId?: string;
+}) {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [removing, setRemoving] = useState(false);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFamilyMembers(familyId)
       .then(setMembers)
       .finally(() => setLoading(false));
   }, [familyId]);
+
+  const { toast } = useToast();
+
+  async function handleRemove(userId: string, name: string) {
+    setRemoving(true);
+    try {
+      await removeFamilyMember(familyId, userId);
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+      setRemoveConfirmId(null);
+      toast({ title: `${name || "Member"} removed from family` });
+    } catch (e: any) {
+      toast({ title: "Could not remove member", description: e.message, variant: "destructive" });
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading members…</p>;
 
@@ -173,21 +197,57 @@ function MembersTab({ familyId, isFamilyAdmin }: { familyId: string; isFamilyAdm
       {members.map((m) => {
         const profile = m.profiles as any;
         const initials = profile?.full_name?.[0]?.toUpperCase() ?? "?";
+        const isSelf = m.user_id === currentUserId;
+        // Admins cannot remove themselves; only family admin can remove others
+        const canRemove = isFamilyAdmin && !isSelf;
+
         return (
-          <div key={m.id} className="flex items-center gap-3 rounded-xl border p-3 bg-card">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={profile?.avatar_url ?? undefined} />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{profile?.full_name ?? "Family member"}</p>
-              <p className="text-xs text-muted-foreground">
-                Joined {m.joined_at ? format(new Date(m.joined_at), "MMM d, yyyy") : "—"}
-              </p>
+          <div key={m.id}>
+            <div className="flex items-center gap-3 rounded-xl border p-3 bg-card">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={profile?.avatar_url ?? undefined} />
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{profile?.full_name ?? "Family member"}</p>
+                <p className="text-xs text-muted-foreground">
+                  Joined {m.joined_at ? format(new Date(m.joined_at), "MMM d, yyyy") : "—"}
+                </p>
+              </div>
+              <Badge variant="outline" className={m.role === "admin" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-slate-50"}>
+                {m.role}
+              </Badge>
+              {canRemove && (
+                <button
+                  onClick={() => setRemoveConfirmId(removeConfirmId === m.user_id ? null : m.user_id)}
+                  className="ml-1 rounded p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                  title="Remove from family"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <Badge variant="outline" className={m.role === "admin" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-slate-50"}>
-              {m.role}
-            </Badge>
+            {/* Inline remove confirmation */}
+            {removeConfirmId === m.user_id && (
+              <div className="mx-1 mt-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+                <p className="text-red-700 font-medium mb-2">
+                  Remove {profile?.full_name ?? "this member"} from the family?
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={removing}
+                    onClick={() => handleRemove(m.user_id, profile?.full_name ?? "")}
+                  >
+                    Remove
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setRemoveConfirmId(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

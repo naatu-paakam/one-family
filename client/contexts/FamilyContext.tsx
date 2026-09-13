@@ -19,7 +19,7 @@ interface FamilyContextValue {
   families: Family[]
   activeFamilyId: string | null
   activeFamily: Family | null
-  isFamilyAdmin: boolean       // ADR-005 — true if role='admin' OR isPortalAdmin
+  isFamilyAdmin: boolean       // ADR-005 — true only if role='admin' in active family
   setActiveFamilyId: (id: string) => void
   reload: () => Promise<void>
   loading: boolean
@@ -61,8 +61,9 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
 
   const activeFamily = families.find(f => f.id === activeFamilyId) ?? null
   const enableVideoUpload = activeFamily?.enable_video_upload ?? false
-  // ADR-005: isFamilyAdmin is true if user is admin of active family OR is portal admin
-  const isFamilyAdmin = activeFamily?.role === 'admin' || isPortalAdmin
+  // ADR-005: isFamilyAdmin reflects the user's role in the active family only.
+  // Portal admin status does NOT grant family admin UI — use /portal for platform ops.
+  const isFamilyAdmin = activeFamily?.role === 'admin'
 
   return (
     <FamilyContext.Provider value={{ families, activeFamilyId, activeFamily, isFamilyAdmin, setActiveFamilyId, reload: load, loading, enableVideoUpload }}>

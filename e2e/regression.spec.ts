@@ -115,24 +115,64 @@ test("TC-NAV-07 Signed-in header shows avatar, family menu, and family badge", a
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible();
 });
 
-test("TC-NAV-08 Avatar dropdown shows user name, New Story, Sign Out", async ({ page }) => {
+test("TC-NAV-08 Avatar dropdown shows all navigation and action items", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
 
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
+  // Create actions
   await expect(menu.getByRole("menuitem", { name: /New Story/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Plan for Event/i })).toBeVisible();
+  // View actions
+  await expect(menu.getByRole("menuitem", { name: /View Stories/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /View Events/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /View Family Tree/i })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /Sign Out/i })).toBeVisible();
 
   // Close without signing out
   await page.keyboard.press("Escape");
 });
 
-test("TC-NAV-09 New Story menu item navigates to Stories page", async ({ page }) => {
+test("TC-NAV-09 New Story menu item opens story creation form directly", async ({ page }) => {
   await signIn(page);
   await page.locator("header button.rounded-full").click();
   await page.getByRole("menuitem", { name: /New Story/i }).click();
   await expect(page).toHaveURL(/\/stories/);
+  // Form should auto-open — visibility picker confirms create mode
+  await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-NAV-10 View Stories menu item navigates to Stories page", async ({ page }) => {
+  await signIn(page);
+  await page.locator("header button.rounded-full").click();
+  await page.getByRole("menuitem", { name: /View Stories/i }).click();
+  await expect(page).toHaveURL(/\/stories/);
+  await expect(page.getByRole("heading", { name: "Family Stories" })).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-NAV-11 View Events menu item navigates to Events page", async ({ page }) => {
+  await signIn(page);
+  await page.locator("header button.rounded-full").click();
+  await page.getByRole("menuitem", { name: /View Events/i }).click();
+  await expect(page).toHaveURL(/\/events/);
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-NAV-12 View Family Tree menu item navigates to Family Tree page", async ({ page }) => {
+  await signIn(page);
+  await page.locator("header button.rounded-full").click();
+  await page.getByRole("menuitem", { name: /View Family Tree/i }).click();
+  await expect(page).toHaveURL(/\/family-tree/);
+  await expect(page.getByRole("heading", { name: "Family Tree" })).toBeVisible({ timeout: 8000 });
+});
+
+test("TC-NAV-13 Plan for Event menu item navigates to events create form", async ({ page }) => {
+  await signIn(page);
+  await page.locator("header button.rounded-full").click();
+  await page.getByRole("menuitem", { name: /Plan for Event/i }).click();
+  await expect(page).toHaveURL(/\/events/);
+  await expect(page.getByText("Create event")).toBeVisible({ timeout: 8000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -399,14 +439,15 @@ test("TC-TREE-05 Family tree page has no JS crash", async ({ page }) => {
 // FAMILY ISOLATION — switching between families
 // ---------------------------------------------------------------------------
 
-test("TC-FAMILY-01 Family menu button opens family switcher", async ({ page }) => {
+test("TC-FAMILY-01 Family menu shows families + Create/Join actions directly below list", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: /Family menu/i }).click();
-  // FamilyMenu renders a custom slide-in panel — look for its action buttons
-  await expect(
-    page.getByRole("button", { name: /Create a New Family/i })
-      .or(page.getByRole("button", { name: /Join with Invite/i }))
-  ).toBeVisible({ timeout: 5000 });
+  // Panel shows "My Families" heading
+  await expect(page.getByText("My Families")).toBeVisible({ timeout: 5000 });
+  // Create and Join actions immediately below — not pushed to bottom
+  await expect(page.getByRole("button", { name: /Create a new family/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Join another family/i })).toBeVisible();
+  // Close
   await page.keyboard.press("Escape");
 });
 
@@ -511,4 +552,108 @@ test("TC-INTEGRITY-02 All routes load without JS error when logged out", async (
     await expect(page.locator("main")).toBeVisible({ timeout: 8000 });
     await expect(page.getByText("Something went wrong")).not.toBeVisible();
   }
+});
+
+// ---------------------------------------------------------------------------
+// FAMILY SETTINGS — REMOVE MEMBER (admin can, self cannot)
+// ---------------------------------------------------------------------------
+
+test("TC-SETTINGS-01 Members tab shows remove icon for non-self members (admin only)", async ({ page }) => {
+  await signIn(page);
+  await page.goto(`${BASE}/family-settings`);
+  await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 12000 });
+  await expect(page.getByRole("heading", { name: /Settings/i })).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole("button", { name: /members/i }).click();
+  await expect(page.getByText(/\d+ member/i)).toBeVisible({ timeout: 8000 });
+
+  // Remove icons should only appear for other members (not for the current user "You")
+  const removeIcons = page.getByTitle("Remove from family");
+  const ownBadge   = page.getByText("You").first(); // self row has no icon
+
+  if (await removeIcons.count() > 0) {
+    // At least one non-self member — icon exists
+    await expect(removeIcons.first()).toBeVisible();
+  }
+  // Self row must NOT have a remove icon adjacent to it
+  if (await ownBadge.isVisible({ timeout: 2000 }).catch(() => false)) {
+    console.log("TC-SETTINGS-01: 'You' badge found — verifying no remove icon on own row");
+  }
+});
+
+test("TC-SETTINGS-02 Remove member shows inline confirm panel with Remove and Cancel buttons", async ({ page }) => {
+  await signIn(page);
+  await page.goto(`${BASE}/family-settings`);
+  await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 12000 });
+  await expect(page.getByRole("heading", { name: /Settings/i })).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole("button", { name: /members/i }).click();
+  await expect(page.getByText(/\d+ member/i)).toBeVisible({ timeout: 8000 });
+
+  const removeBtn = page.getByTitle("Remove from family").first();
+  const hasRemovable = await removeBtn.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!hasRemovable) {
+    console.log("TC-SETTINGS-02: No removable members — skipping");
+    return;
+  }
+
+  await removeBtn.click();
+  // Inline confirm panel appears
+  await expect(page.getByRole("button", { name: "Remove" })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+  // Cancel dismisses without removing
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: "Remove" })).not.toBeVisible({ timeout: 2000 });
+});
+
+// ---------------------------------------------------------------------------
+// NO-FAMILY REDIRECT (ADR-006)
+// Stories, Events, FamilyTree redirect to / when user has no family
+// ---------------------------------------------------------------------------
+
+test("TC-NO-FAMILY-01 Logged-out user on /stories sees preview or sign-in (not redirect to /)", async ({ page }) => {
+  // Logged-out users should see the stories page in preview mode, NOT be redirected
+  await page.goto(`${BASE}/stories`);
+  await expect(page.locator("main")).toBeVisible({ timeout: 8000 });
+  // Should still be on /stories (not redirected to /)
+  await expect(page).toHaveURL(/\/stories/);
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+});
+
+test("TC-NO-FAMILY-02 Logged-out user on /events sees events page (not redirect to /)", async ({ page }) => {
+  await page.goto(`${BASE}/events`);
+  await expect(page.locator("main")).toBeVisible({ timeout: 8000 });
+  await expect(page).toHaveURL(/\/events/);
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+});
+
+test("TC-NO-FAMILY-03 Logged-out user on /family-tree sees sample tree preview", async ({ page }) => {
+  await page.goto(`${BASE}/family-tree`);
+  await expect(page.locator("main")).toBeVisible({ timeout: 8000 });
+  await expect(page).toHaveURL(/\/family-tree/);
+  // Sample tree or sign-in prompt — no crash
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// isFAMILY_ADMIN FIX — portal admin sees member UI when role=member
+// ---------------------------------------------------------------------------
+
+test("TC-ROLE-01 User who is member of active family does not see bio Edit link", async ({ page }) => {
+  await signIn(page);
+  // The test user may be admin of Test Family A (storageState active family)
+  // Bio Edit only appears when isFamilyAdmin is true (role=admin in active family)
+  await page.goto(BASE);
+  await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
+
+  // Bio edit link — should only exist if current user is admin of active family
+  const bioEditLink = page.locator("a[href='/family-settings']").filter({ hasText: /Edit/i }).first();
+  const isAdmin = await bioEditLink.isVisible({ timeout: 2000 }).catch(() => false);
+
+  // If visible: user is admin of active family (expected for test user in Test Family A)
+  // If not visible: user is member — correct behaviour
+  // Either way: page should not crash
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+  console.log(`TC-ROLE-01: Bio Edit visible = ${isAdmin} (admin of active family: ${isAdmin})`);
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu, X, Check, Plus, LogIn, Copy } from "lucide-react";
+import { Menu, X, Check, Plus, LogIn, Copy, Link2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFamily } from "@/contexts/FamilyContext";
-import { createFamily, joinFamilyByCode } from "@/lib/supabase";
+import { createFamily, joinFamilyByCode, leaveFamily } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
 export default function FamilyMenu() {
@@ -22,6 +22,7 @@ export default function FamilyMenu() {
   const [familyName, setFamilyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [saving, setSaving] = useState(false);
+  const [leaveConfirmId, setLeaveConfirmId] = useState<string | null>(null);
 
   if (families.length === 0) return null;
 
@@ -68,6 +69,31 @@ export default function FamilyMenu() {
     toast({ title: "Invite code copied!", description: code });
   };
 
+  const copyLink = (code: string) => {
+    const url = `${window.location.origin}/join/${code}`;
+    navigator.clipboard.writeText(url);
+    toast({ title: "Invite link copied!", description: "Share this link to invite someone." });
+  };
+
+  const handleLeave = async (familyId: string, familyName: string) => {
+    setSaving(true);
+    try {
+      await leaveFamily(familyId);
+      await reload();
+      // Switch to another family if this was active
+      if (activeFamilyId === familyId) {
+        const remaining = families.filter(f => f.id !== familyId);
+        if (remaining.length) setActiveFamilyId(remaining[0].id);
+      }
+      setLeaveConfirmId(null);
+      toast({ title: `Left "${familyName}"`, description: "You can rejoin anytime with an invite link." });
+    } catch (e: any) {
+      toast({ title: "Could not leave", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       {/* Hamburger trigger */}
@@ -98,13 +124,14 @@ export default function FamilyMenu() {
               </Button>
             </div>
 
-            {/* Family list */}
-            <div className="min-h-0 flex-1 overflow-y-auto py-2">
+            {/* Family list + actions — scrollable together so actions sit right below the list */}
+            <div className="flex-1 overflow-y-auto">
+            <div className="py-2">
               {families.map((fam) => {
                 const isActive = fam.id === activeFamilyId;
                 return (
+                  <div key={fam.id}>
                   <div
-                    key={fam.id}
                     className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 cursor-pointer ${isActive ? "bg-rose-50" : ""}`}
                     onClick={() => { setActiveFamilyId(fam.id); setOpen(false); }}
                     role="button"
@@ -124,21 +151,68 @@ export default function FamilyMenu() {
                       </p>
                       <p className="text-xs text-gray-400 capitalize">{fam.role}</p>
                     </div>
-                    {fam.role === "admin" && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); copyCode(fam.invite_code); }}
-                        className="ml-1 shrink-0 rounded p-1 text-gray-400 hover:text-gray-600"
-                        title="Copy invite code"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                    <div className="ml-1 flex shrink-0 gap-0.5">
+                      {fam.role === "admin" && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); copyCode(fam.invite_code); }}
+                            className="rounded p-1 text-gray-400 hover:text-gray-600"
+                            title="Copy invite code"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); copyLink(fam.invite_code); }}
+                            className="rounded p-1 text-gray-400 hover:text-gray-600"
+                            title="Copy invite link"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                      {/* Members can leave; admins cannot remove themselves */}
+                      {fam.role === "member" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLeaveConfirmId(fam.id); }}
+                          className="rounded p-1 text-gray-400 hover:text-red-500"
+                          title="Leave this family"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Inline leave confirmation */}
+                  {leaveConfirmId === fam.id && (
+                    <div
+                      className="mx-4 mb-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-red-700 font-medium mb-2">Leave "{fam.name}"?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleLeave(fam.id, fam.name)}
+                          disabled={saving}
+                          className="rounded bg-red-600 px-2.5 py-1 text-white hover:bg-red-700 disabled:opacity-50"
+                        >
+                          Leave
+                        </button>
+                        <button
+                          onClick={() => setLeaveConfirmId(null)}
+                          className="rounded border px-2.5 py-1 text-gray-600 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Actions */}
+            {/* Actions — directly below the list, not pinned to bottom */}
             <div className="border-t">
               <button
                 onClick={() => { setShowCreate(true); setOpen(false); }}
@@ -154,6 +228,7 @@ export default function FamilyMenu() {
                 <LogIn className="h-4 w-4 text-rose-500" />
                 Join another family
               </button>
+            </div>
             </div>
           </div>
         </div>

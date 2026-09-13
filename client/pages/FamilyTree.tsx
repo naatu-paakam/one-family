@@ -6,6 +6,7 @@
 
 import FamilyTree, { Member } from "@/components/FamilyTree";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -74,7 +75,7 @@ function searchMatchIds(root: Member, q: string): Set<string> {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FamilyTreePage() {
-  const { activeFamilyId, activeFamily } = useFamily();
+  const { activeFamilyId, activeFamily, families, loading: familiesLoading } = useFamily();
   const { session, profile, openAuthModal, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -330,6 +331,11 @@ export default function FamilyTreePage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isPreview = !session || !activeFamilyId;
+
+  // No-family guard (ADR-006)
+  if (session && !familiesLoading && families.length === 0) {
+    return <Navigate to="/" replace />;
+  }
 
   if (authLoading) {
     return <div className="container py-16 text-center text-muted-foreground">Loading…</div>;

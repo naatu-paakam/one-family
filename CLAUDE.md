@@ -106,10 +106,19 @@ Sign in with:
    - Events page only shows events for the active family
    - Family tree page loads the correct family's tree
 
+3b. **My Families panel (hamburger menu)**
+   - Opens as a slide-in from the right, showing all the user's families
+   - Active family highlighted in pink; green dot indicator
+   - Admin families show: 📋 copy invite code · 🔗 copy invite link (full URL)
+   - Member families show: 🗑 leave icon — clicking shows inline confirm ("Leave / Cancel")
+   - Admins cannot leave their own family via this UI (trash icon not shown for admin role)
+   - "Create a new family" and "Join another family" appear directly below the list, not pinned to bottom
+   - `/join/:code` page: two-section design — top section always shows invite card, bottom section transitions through states (sign-in → joining → success/error) without page replacement or flicker
+
 4. **Header / Auth**
    - "Join Family" button visible when logged out
    - Sign-in modal: email/password + Google OAuth button
-   - After sign-in: avatar appears, "Plan for Event" button visible, active family badge appears
+   - After sign-in: avatar appears, active family badge appears
    - Active event pills appear below header when events exist for the active family
    - Sign out clears session and removes family badge
 

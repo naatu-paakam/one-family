@@ -614,6 +614,26 @@ export async function demotePortalAdmin(userId: string) {
   if (error) throw error
 }
 
+export async function leaveFamily(familyId: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not signed in')
+  const { error } = await supabase
+    .from('family_members')
+    .delete()
+    .eq('family_id', familyId)
+    .eq('user_id', user.id)
+  if (error) throw error
+}
+
+export async function removeFamilyMember(familyId: string, userId: string) {
+  const { error } = await supabase
+    .from('family_members')
+    .delete()
+    .eq('family_id', familyId)
+    .eq('user_id', userId)
+  if (error) throw error
+}
+
 export async function deleteFamily(familyId: string) {
   const { error } = await supabase.rpc('portal_delete_family', { p_family_id: familyId })
   if (error) throw error

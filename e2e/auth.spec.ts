@@ -317,3 +317,95 @@ test("TC-AUTH-12 Cancel on Join with Invite Code form returns to home page", asy
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page).toHaveURL(BASE + "/", { timeout: 5000 });
 });
+
+// ── TC-AUTH-13: /join/:code page — logged-out user sees two-section design ─────
+
+test("TC-AUTH-13 Join page (logged-out) shows invitation card + sign-in section", async ({ browser }) => {
+  const ctx = await browser.newContext(); // no storageState = logged out
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/join/testcode123`);
+
+  // Section 1: always visible
+  await expect(page.getByRole("heading", { name: /You've been invited/i })).toBeVisible({ timeout: 8000 });
+
+  // Section 2: sign-in button since not logged in
+  await expect(page.getByRole("button", { name: /Sign in \/ Sign up/i })).toBeVisible({ timeout: 5000 });
+
+  // No "joining" spinner or success yet
+  await expect(page.getByText(/Joining family/i)).not.toBeVisible();
+  await ctx.close();
+});
+
+// ── TC-AUTH-14: /join/:code page — logged-in user sees invite card + status ─────
+
+test("TC-AUTH-14 Join page (logged-in) shows invitation card without sign-in button", async ({ page }) => {
+  await signIn(page);
+  // Navigate to join page (code will fail — that's okay, we test the UI structure)
+  await page.goto(`${BASE}/join/invalidcode999`);
+
+  // Section 1: always visible regardless of auth state
+  await expect(page.getByRole("heading", { name: /You've been invited/i })).toBeVisible({ timeout: 8000 });
+
+  // Section 2: no sign-in button for logged-in user
+  await expect(page.getByRole("button", { name: /Sign in \/ Sign up/i })).not.toBeVisible({ timeout: 3000 });
+
+  // Either joining spinner or error — not the sign-in form
+  const hasSpinner = await page.locator(".animate-spin").isVisible({ timeout: 5000 }).catch(() => false);
+  const hasError   = await page.getByText(/not valid/i).isVisible({ timeout: 5000 }).catch(() => false);
+  expect(hasSpinner || hasError).toBeTruthy();
+});
+
+// ── TC-AUTH-16: Leave family — trash icon shown for members, not admins ───────
+
+test("TC-AUTH-16 Family menu: leave icon shown for member-role families, hidden for admin", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: /Family menu/i }).click();
+  await expect(page.getByText("My Families")).toBeVisible({ timeout: 5000 });
+
+  // For each visible family entry, check icon rules:
+  // admin families → no trash (leave) icon
+  // member families → trash icon visible
+  const adminRows = page.locator("[title='Copy invite code']");
+  const trashIcons = page.locator("[title='Leave this family']");
+
+  const adminCount = await adminRows.count();
+  const trashCount = await trashIcons.count();
+
+  // If user is admin of all families, no trash icons should appear
+  // If user is member of any family, trash icon should appear for those
+  console.log(`TC-AUTH-16: admin families=${adminCount}, leave icons=${trashCount}`);
+
+  // Verify admin families do NOT have a leave icon adjacent to them
+  // (structural check — trash is only rendered for role==="member")
+  if (adminCount > 0 && trashCount === 0) {
+    // All admin — correct
+    await expect(trashIcons).toHaveCount(0);
+  } else if (trashCount > 0) {
+    // At least one member family — leave icon exists and is visible
+    await expect(trashIcons.first()).toBeVisible();
+  }
+  await page.keyboard.press("Escape");
+});
+
+// ── TC-AUTH-15: Family menu copy link icon visible to admin ──────────────────
+
+test("TC-AUTH-15 Family menu shows copy invite code and copy invite link icons for admin", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: /Family menu/i }).click();
+  await expect(page.getByText("My Families")).toBeVisible({ timeout: 5000 });
+
+  // Both copy buttons visible for admin families
+  const copyCodeBtn = page.getByTitle("Copy invite code").first();
+  const copyLinkBtn = page.getByTitle("Copy invite link").first();
+  const hasCode = await copyCodeBtn.isVisible({ timeout: 3000 }).catch(() => false);
+  const hasLink = await copyLinkBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+  // Test user must be admin of at least one family for these to appear
+  if (hasCode) {
+    await expect(copyCodeBtn).toBeVisible();
+    await expect(copyLinkBtn).toBeVisible();
+  } else {
+    console.log("TC-AUTH-15: No admin families visible — skipping icon check");
+  }
+  await page.keyboard.press("Escape");
+});

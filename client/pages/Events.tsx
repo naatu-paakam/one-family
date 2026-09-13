@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -92,7 +92,7 @@ type Mode = "none" | "create" | "edit";
 export default function Events() {
   const { session, openAuthModal } = useAuth();
   const { activeEvents, startEvent, endEvent } = useEvent();
-  const { activeFamilyId, isFamilyAdmin, enableVideoUpload } = useFamily();
+  const { activeFamilyId, isFamilyAdmin, enableVideoUpload, families, loading: familiesLoading } = useFamily();
 
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
@@ -219,6 +219,11 @@ export default function Events() {
     const updated = await updateEvent(eventId, patch) as FamilyEvent;
     setAllEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...updated } : e)));
     setMode("none");
+  }
+
+  // No-family guard (ADR-006)
+  if (session && !familiesLoading && families.length === 0) {
+    return <Navigate to="/" replace />;
   }
 
   return (

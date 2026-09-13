@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
-import { LogOut, PenSquare, CalendarPlus, BookOpen, CalendarDays, Settings, Shield } from "lucide-react";
+import { LogOut, PenSquare, CalendarPlus, BookOpen, CalendarDays, TreePine, Settings, Shield } from "lucide-react";
 import FamilyMenu from "./FamilyMenu";
 import { useFamily } from "@/contexts/FamilyContext";
 
@@ -244,17 +244,20 @@ export default function SiteHeader() {
                     <div className="px-2 py-1.5 text-sm font-medium truncate">{displayName}</div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
+                      <Link to="/stories?new=1" className="gap-2"><PenSquare className="h-4 w-4" /> New Story</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/events?create=1" className="gap-2"><CalendarPlus className="h-4 w-4" /> Plan for Event</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
                       <Link to="/stories" className="gap-2"><BookOpen className="h-4 w-4" /> View Stories</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link to="/events" className="gap-2"><CalendarDays className="h-4 w-4" /> View Events</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link to="/stories" className="gap-2"><PenSquare className="h-4 w-4" /> New Story</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/events?create=1" className="gap-2"><CalendarPlus className="h-4 w-4" /> Plan for Event</Link>
+                      <Link to="/family-tree" className="gap-2"><TreePine className="h-4 w-4" /> View Family Tree</Link>
                     </DropdownMenuItem>
                     {/* [ROLE: family-admin] */}
                     {isFamilyAdmin && (

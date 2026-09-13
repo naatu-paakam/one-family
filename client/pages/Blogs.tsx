@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, Navigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ function CopyLinkButton({ storyId, dim, tooltip }: { storyId: string; dim?: bool
 
 export default function Blogs() {
   const { session, openAuthModal } = useAuth();
-  const { isFamilyAdmin } = useFamily();
+  const { isFamilyAdmin, families, loading: familiesLoading } = useFamily();
   const { activeEvents } = useEvent();
   const { activeFamilyId, enableVideoUpload } = useFamily();
 
@@ -127,6 +128,15 @@ export default function Blogs() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("none");
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open new story form when ?new=1 is in the URL (e.g. from "New Story" dropdown)
+  useEffect(() => {
+    if (searchParams.get("new") === "1" && session) {
+      setMode("create");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadPosts() {
     setLoading(true);
@@ -179,6 +189,11 @@ export default function Blogs() {
   const startCreate = () => setMode("create");
   const startEdit = () => setMode("edit");
   const cancel = () => setMode("none");
+
+  // No-family guard: redirect to home which shows Create/Join prompts (ADR-006)
+  if (session && !familiesLoading && families.length === 0) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="container py-8">
