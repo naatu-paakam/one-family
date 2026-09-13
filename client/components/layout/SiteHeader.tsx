@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
-import { LogOut, PenSquare, CalendarPlus, Settings, Shield } from "lucide-react";
+import { LogOut, PenSquare, CalendarPlus, BookOpen, CalendarDays, Settings, Shield } from "lucide-react";
 import FamilyMenu from "./FamilyMenu";
 import { useFamily } from "@/contexts/FamilyContext";
 
@@ -242,6 +242,13 @@ export default function SiteHeader() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
                     <div className="px-2 py-1.5 text-sm font-medium truncate">{displayName}</div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link to="/stories" className="gap-2"><BookOpen className="h-4 w-4" /> View Stories</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/events" className="gap-2"><CalendarDays className="h-4 w-4" /> View Events</Link>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <Link to="/stories" className="gap-2"><PenSquare className="h-4 w-4" /> New Story</Link>
