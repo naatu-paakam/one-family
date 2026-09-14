@@ -5,17 +5,21 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, MapPin, LogIn } from "lucide-react";
+import { CalendarDays, MapPin, LogIn, ArrowLeft, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
+import CommentThread from "@/components/CommentThread";
 import { format } from "date-fns";
 
 export default function PublicEvent() {
   const { id } = useParams<{ id: string }>();
   const { session, openAuthModal, loading: authLoading } = useAuth();
+  const { isFamilyAdmin, activeFamilyId, enableVideoUpload } = useFamily();
+  const navigate = useNavigate();
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -92,6 +96,7 @@ export default function PublicEvent() {
   }
 
   const isPast = !!event.closed_at;
+  const canEdit = session && (isFamilyAdmin || event.created_by === session.user.id);
 
   const BANNER: Record<string, { icon: string; label: string; bg: string; text: string; border: string }> = {
     family: { icon: "❤️", label: "Family event — visible to family members",  bg: "bg-pink-50",    text: "text-pink-700",  border: "border-pink-200" },
@@ -102,6 +107,14 @@ export default function PublicEvent() {
 
   return (
     <div className="container py-10 max-w-2xl mx-auto">
+      {/* Back link */}
+      <button
+        onClick={() => navigate("/events")}
+        className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to Events
+      </button>
+
       {/* Visibility banner */}
       <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${banner.bg} ${banner.text} border ${banner.border}`}>
         <span>{banner.icon}</span>
@@ -124,13 +137,33 @@ export default function PublicEvent() {
             <span>By {event.profiles?.full_name ?? "Family"}</span>
           </div>
         </div>
-        <Badge className={isPast ? "bg-slate-100 text-slate-700" : "bg-amber-100 text-amber-700 border-amber-300"}>
-          {isPast ? "Past" : "Live"}
-        </Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge className={isPast ? "bg-slate-100 text-slate-700" : "bg-amber-100 text-amber-700 border-amber-300"}>
+            {isPast ? "Past" : "Live"}
+          </Badge>
+          {canEdit && (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/events?edit=${id}`)}>
+              <Pencil className="h-3.5 w-3.5 mr-1.5" /> Modify Event
+            </Button>
+          )}
+        </div>
       </div>
 
       {event.description && (
         <p className="text-muted-foreground leading-relaxed mb-8 whitespace-pre-wrap">{event.description}</p>
+      )}
+
+      {/* Comments for signed-in users */}
+      {session && (
+        <div className="mt-8 pt-8 border-t">
+          <CommentThread
+            parentId={event.id}
+            parentType="event"
+            familyId={activeFamilyId}
+            session={session}
+            enableVideoUpload={enableVideoUpload}
+          />
+        </div>
       )}
 
       {/* CTA for non-members */}
@@ -149,12 +182,6 @@ export default function PublicEvent() {
             </Button>
           </div>
         </div>
-      )}
-
-      {session && (
-        <Button asChild className="mt-4" variant="outline">
-          <Link to="/events">View all events →</Link>
-        </Button>
       )}
     </div>
   );

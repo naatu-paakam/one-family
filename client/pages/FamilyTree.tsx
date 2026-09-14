@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 
 // ── Flat ↔ Nested conversion ─────────────────────────────────────────────────
 
-function flatToMember(n: FlatTreeNode): Member {
+export function flatToMember(n: FlatTreeNode): Member {
   return {
     id: n.id,
     name: n.name,
@@ -34,7 +34,7 @@ function flatToMember(n: FlatTreeNode): Member {
   };
 }
 
-function buildTree(nodes: FlatTreeNode[]): Member | null {
+export function buildTree(nodes: FlatTreeNode[]): Member | null {
   if (!nodes.length) return null;
   const map = new Map(nodes.map(n => [n.id, { ...flatToMember(n), children: [] as Member[] }]));
   let root: Member | null = null;

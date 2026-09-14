@@ -5,24 +5,25 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogIn } from "lucide-react";
+import { LogIn, ArrowLeft, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
+import CommentThread from "@/components/CommentThread";
 import { format } from "date-fns";
 
 export default function PublicStory() {
   const { id } = useParams<{ id: string }>();
-  const { session, openAuthModal } = useAuth();
+  const { session, openAuthModal, loading: authLoading } = useAuth();
+  const { isFamilyAdmin, activeFamilyId, enableVideoUpload } = useFamily();
+  const navigate = useNavigate();
   const [story, setStory] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [requiresSignIn, setRequiresSignIn] = useState(false);
-
-  // Wait for auth to finish loading before fetching — prevents false requiresSignIn
-  const { loading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!id || authLoading) return; // wait until auth state is known
@@ -100,16 +101,37 @@ export default function PublicStory() {
     public: { icon: "🌐", label: "Public story — visible to everyone",         bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
   };
   const banner = BANNER[story.visibility] ?? BANNER.public;
+  const canEdit = session && (isFamilyAdmin || story.author_id === session.user.id);
 
   return (
     <div className="container py-10 max-w-2xl mx-auto">
+      {/* Back link */}
+      <button
+        onClick={() => navigate("/stories")}
+        className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to Stories
+      </button>
+
       {/* Visibility banner */}
       <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 mb-6 ${banner.bg} ${banner.text} border ${banner.border}`}>
         <span>{banner.icon}</span>
         <span>{banner.label}</span>
       </div>
 
-      <h1 className="text-3xl font-extrabold tracking-tight mb-2">{story.title}</h1>
+      <div className="flex items-start justify-between gap-4 mb-2">
+        <h1 className="text-3xl font-extrabold tracking-tight">{story.title}</h1>
+        {canEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 mt-1"
+            onClick={() => navigate(`/stories?edit=${id}`)}
+          >
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Modify Post
+          </Button>
+        )}
+      </div>
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
         <span>By {story.profiles?.full_name ?? "Family Member"}</span>
@@ -131,6 +153,19 @@ export default function PublicStory() {
       <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap leading-relaxed">
         {story.content}
       </div>
+
+      {/* Comments */}
+      {story.comments_enabled && session && (
+        <div className="mt-10 pt-8 border-t">
+          <CommentThread
+            parentId={story.id}
+            parentType="story"
+            familyId={activeFamilyId}
+            session={session}
+            enableVideoUpload={enableVideoUpload}
+          />
+        </div>
+      )}
 
       {/* CTA for non-members */}
       {!session && (

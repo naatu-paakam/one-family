@@ -538,7 +538,7 @@ test("E2E-DB-01 All core tables exist in public schema", async () => {
   const tables = [
     "profiles", "families", "family_members", "updates", "events",
     "story_families", "event_families", "comments", "comment_reactions",
-    "family_trees", "family_tree_nodes", "family_invitations", "family_story_templates",
+    "family_tree_nodes", "family_invitations", "family_story_templates",
   ];
   const result = dbQuery(
     "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name;"

@@ -5,11 +5,12 @@ import AISummary from "@/components/AISummary";
 import FamilyTree from "@/components/FamilyTree";
 import { Badge } from "@/components/ui/badge";
 import { CalendarPlus, Users, MailCheck } from "lucide-react";
-import { fetchUpdates, fetchFamilyTree } from "@/lib/supabase";
+import { fetchUpdates, fetchFamilyTreeNodes } from "@/lib/supabase";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type Member } from "@/components/FamilyTree";
+import { buildTree } from "@/pages/FamilyTree";
 import { format } from "date-fns";
 
 type Update = {
@@ -40,7 +41,7 @@ export default function Index() {
 
   useEffect(() => {
     if (!activeFamilyId) { setTreeData(undefined); return; }
-    fetchFamilyTree(activeFamilyId).then((data) => setTreeData(data as Member ?? undefined));
+    fetchFamilyTreeNodes(activeFamilyId).then((nodes) => setTreeData(buildTree(nodes) ?? undefined));
   }, [activeFamilyId]);
 
   const aiSnapshot = useMemo(() => {
@@ -283,9 +284,9 @@ export default function Index() {
             link="/events"
           />
           <FeatureCard
-            title="AI Summaries"
-            desc="Automatic highlights from posts and events. See what's new at a glance."
-            link="#ai"
+            title="Family Tree"
+            desc="Build your family tree together. Add members, connect generations, and watch your family grow across branches."
+            link="/family-tree"
           />
         </div>
       </section>

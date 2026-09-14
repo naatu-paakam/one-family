@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, Navigate } from "react-router-dom";
+import { useSearchParams, Navigate, useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -93,6 +93,7 @@ export default function Events() {
   const { session, openAuthModal } = useAuth();
   const { activeEvents, startEvent, endEvent } = useEvent();
   const { activeFamilyId, isFamilyAdmin, enableVideoUpload, families, loading: familiesLoading } = useFamily();
+  const navigate = useNavigate();
 
   const [allEvents, setAllEvents] = useState<FamilyEvent[]>([]);
   const [eventPosts, setEventPosts] = useState<Record<string, Post[]>>({});
@@ -138,7 +139,6 @@ export default function Events() {
             new Date(a.created_at ?? a.started_at ?? 0).getTime(),
         );
         setAllEvents(evList);
-        if (!selectedId && evList.length) setSelectedId(evList[0].id);
 
         const map: Record<string, Post[]> = {};
         for (const p of posts ?? []) {
@@ -171,6 +171,19 @@ export default function Events() {
     load();
   }, [activeEvents, activeFamilyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Open edit form when ?edit=<id> is in URL (linked from event page)
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (editId && allEvents.length > 0) {
+      const ev = allEvents.find((e) => e.id === editId);
+      if (ev) {
+        setSelectedId(editId);
+        setMode("edit");
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [allEvents, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return allEvents
@@ -181,14 +194,13 @@ export default function Events() {
         return true;
       })
       .sort((a, b) =>
-        new Date(a.started_at ?? a.created_at).getTime() -
-        new Date(b.started_at ?? b.created_at).getTime(),
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
   }, [allEvents, tab, query]);
 
   const selected = useMemo(
-    () => allEvents.find((e) => e.id === selectedId) ?? filtered[0] ?? null,
-    [allEvents, selectedId, filtered],
+    () => allEvents.find((e) => e.id === selectedId) ?? null,
+    [allEvents, selectedId],
   );
 
   async function handleAddInvite(eventId: string, full_name: string, email: string | null, invitedUserId?: string | null) {
@@ -252,24 +264,22 @@ export default function Events() {
 
           <div className="mt-5">
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-              <div className="grid gap-5 md:grid-cols-2 items-center">
-                <TabsList>
+              <div className="flex items-center gap-3">
+                <TabsList className="flex-1">
                   <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
                   <TabsTrigger value="ongoing">Ongoing</TabsTrigger>
                   <TabsTrigger value="past">Past</TabsTrigger>
                   <TabsTrigger value="all">All</TabsTrigger>
                 </TabsList>
-                <div className="flex md:justify-end">
-                  <Button
-                    onClick={session ? () => setMode("create") : () => openAuthModal()}
-                    className="h-10 w-10 rounded-full p-0"
-                    aria-label="New Event"
-                    title="New Event"
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span className="sr-only">New Event</span>
-                  </Button>
-                </div>
+                <Button
+                  onClick={session ? () => setMode("create") : () => openAuthModal()}
+                  className="h-10 w-10 rounded-full p-0 shrink-0"
+                  aria-label="New Event"
+                  title="New Event"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span className="sr-only">New Event</span>
+                </Button>
               </div>
 
               {(["upcoming", "ongoing", "past", "all"] as const).map((key) => (
@@ -286,11 +296,7 @@ export default function Events() {
                           ev={ev}
                           invites={invitesByEvent[ev.id] ?? []}
                           commentCount={commentCounts[ev.id] ?? 0}
-                          active={selected?.id === ev.id}
-                          onSelect={() => {
-                            setSelectedId(ev.id);
-                            setMode("none");
-                          }}
+                          onSelect={() => navigate(`/events/${ev.id}`)}
                         />
                       ))}
                       {filtered.length === 0 && (
@@ -306,65 +312,39 @@ export default function Events() {
           </div>
         </div>
 
-        {/* Right — detail / create / edit */}
-        <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
-          {mode === "create" ? (
-            <div>
-              <div className="text-sm text-muted-foreground">Create event</div>
-              <CreateEventForm
-                onCancel={() => setMode("none")}
-                onSave={async ({ title, description, location, visibility }) => {
-                  await startEvent({ title, description, location, visibility });
-                  setMode("none");
-                }}
-              />
-            </div>
-          ) : mode === "edit" && selected ? (
-            <div>
-              <div className="text-sm text-muted-foreground">Modify event</div>
-              <ModifyEventForm
-                event={selected}
-                canDelete={isFamilyAdmin || selected.created_by === session?.user?.id}
-                onCancel={() => setMode("none")}
-                onSave={(patch) => handleModifyEvent(selected.id, patch)}
-                onDelete={async () => {
-                  await deleteEvent(selected.id);
-                  setAllEvents((prev) => prev.filter((e) => e.id !== selected.id));
-                  setSelectedId(null);
-                  setMode("none");
-                }}
-              />
-            </div>
-          ) : selected ? (
-            <EventDetail
-              event={selected}
-              invites={invitesByEvent[selected.id] ?? []}
-              canClose={
-                !!session &&
-                !selected.closed_at &&
-                activeEvents.some((e) => e.id === selected.id)
-              }
-              canModify={!!session}
-              session={session}
-              familyId={activeFamilyId}
-              enableVideoUpload={enableVideoUpload}
-              onClose={() => endEvent(selected.id)}
-              onModify={() => setMode("edit")}
-              onAddInvite={(name, email, invitedUserId) => handleAddInvite(selected.id, name, email, invitedUserId)}
-              onDeleteInvite={(invId) => handleDeleteInvite(invId, selected.id)}
-              onUpdateStatus={(invId, status) =>
-                handleUpdateInviteStatus(invId, selected.id, status)
-              }
-              onCommentCountChange={(eventId, delta) =>
-                setCommentCounts((prev) => ({ ...prev, [eventId]: Math.max(0, (prev[eventId] ?? 0) + delta) }))
-              }
-            />
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              Select an event to manage invites.
-            </div>
-          )}
-        </aside>
+        {/* Right — create / edit form */}
+        {(mode === "create" || mode === "edit") && (
+          <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
+            {mode === "create" ? (
+              <div>
+                <div className="text-sm text-muted-foreground">Create event</div>
+                <CreateEventForm
+                  onCancel={() => setMode("none")}
+                  onSave={async ({ title, description, location, visibility }) => {
+                    await startEvent({ title, description, location, visibility });
+                    setMode("none");
+                  }}
+                />
+              </div>
+            ) : mode === "edit" && selected ? (
+              <div>
+                <div className="text-sm text-muted-foreground">Modify event</div>
+                <ModifyEventForm
+                  event={selected}
+                  canDelete={isFamilyAdmin || selected.created_by === session?.user?.id}
+                  onCancel={() => { setMode("none"); navigate(`/events/${selected.id}`); }}
+                  onSave={async (patch) => { await handleModifyEvent(selected.id, patch); navigate(`/events/${selected.id}`); }}
+                  onDelete={async () => {
+                    await deleteEvent(selected.id);
+                    setAllEvents((prev) => prev.filter((e) => e.id !== selected.id));
+                    setSelectedId(null);
+                    setMode("none");
+                  }}
+                />
+              </div>
+            ) : null}
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -413,13 +393,11 @@ function EventCard({
   ev,
   invites,
   commentCount,
-  active,
   onSelect,
 }: {
   ev: FamilyEvent;
   invites: Invite[];
   commentCount: number;
-  active?: boolean;
   onSelect: () => void;
 }) {
   const cat = categoryOf(ev);
@@ -430,7 +408,7 @@ function EventCard({
   return (
     <button
       onClick={onSelect}
-      className={`text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md ${active ? "ring-2 ring-primary/30" : ""}`}
+      className="text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md hover:ring-2 hover:ring-primary/20"
     >
       <div className="flex items-start justify-between gap-3">
         <div>

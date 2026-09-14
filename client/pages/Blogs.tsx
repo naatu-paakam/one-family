@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, Navigate } from "react-router-dom";
+import { useSearchParams, Navigate, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,7 @@ export default function Blogs() {
   const { isFamilyAdmin, families, loading: familiesLoading } = useFamily();
   const { activeEvents } = useEvent();
   const { activeFamilyId, enableVideoUpload } = useFamily();
+  const navigate = useNavigate();
 
   const [posts, setPosts] = useState<Update[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +131,7 @@ export default function Blogs() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-open new story form when ?new=1 is in the URL (e.g. from "New Story" dropdown)
+  // Auto-open new story form when ?new=1 is in the URL
   useEffect(() => {
     if (searchParams.get("new") === "1" && session) {
       setMode("create");
@@ -143,7 +144,6 @@ export default function Blogs() {
     try {
       const data = await fetchUpdates({ limit: 100, familyId: activeFamilyId });
       setPosts(data ?? []);
-      if (!selectedId && data?.length) setSelectedId(data[0].id);
       // Fetch comment counts for stories that have comments enabled
       if (data?.length) {
         const enabledIds = (data as Update[])
@@ -158,6 +158,19 @@ export default function Blogs() {
       setLoading(false);
     }
   }
+
+  // Open edit form when ?edit=<id> is in URL (linked from story page)
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (editId && posts.length > 0) {
+      const post = posts.find((p) => p.id === editId);
+      if (post) {
+        setSelectedId(editId);
+        setMode("edit");
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [posts, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadPosts(); }, [activeFamilyId]); // eslint-disable-line
 
@@ -175,19 +188,18 @@ export default function Blogs() {
           return false;
         return true;
       })
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   }, [posts, tab, query]);
 
   const selected = useMemo(
-    () => posts.find((p) => p.id === selectedId) || filtered[0] || posts[0],
-    [posts, selectedId, filtered],
+    () => posts.find((p) => p.id === selectedId) ?? null,
+    [posts, selectedId],
   );
 
   const canEdit =
     selected && (isFamilyAdmin || selected.author_id === session?.user?.id);
 
   const startCreate = () => setMode("create");
-  const startEdit = () => setMode("edit");
   const cancel = () => setMode("none");
 
   // No-family guard: redirect to home which shows Create/Join prompts (ADR-006)
@@ -220,23 +232,21 @@ export default function Blogs() {
 
           <div className="mt-5">
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-              <div className="grid gap-5 md:grid-cols-2 items-center">
-                <TabsList>
+              <div className="flex items-center gap-3">
+                <TabsList className="flex-1">
                   <TabsTrigger value="all">All</TabsTrigger>
                   <TabsTrigger value="published">Published</TabsTrigger>
                   <TabsTrigger value="draft">Drafts</TabsTrigger>
                 </TabsList>
-                <div className="flex md:justify-end">
-                  <Button
-                    onClick={session ? startCreate : () => openAuthModal()}
-                    className="h-10 w-10 rounded-full p-0"
-                    aria-label="New Post"
-                    title="New Post"
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span className="sr-only">New Post</span>
-                  </Button>
-                </div>
+                <Button
+                  onClick={session ? startCreate : () => openAuthModal()}
+                  className="h-10 w-10 rounded-full p-0 shrink-0"
+                  aria-label="New Post"
+                  title="New Post"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span className="sr-only">New Post</span>
+                </Button>
               </div>
 
               {(["all", "published", "draft"] as const).map((key) => (
@@ -251,12 +261,8 @@ export default function Blogs() {
                         <PostCard
                           key={p.id}
                           post={p}
-                          active={selected?.id === p.id}
                           commentCount={commentCounts[p.id]}
-                          onSelect={() => {
-                            setSelectedId(p.id);
-                            setMode("none");
-                          }}
+                          onSelect={() => navigate(`/stories/${p.id}`)}
                         />
                       ))}
                       {filtered.length === 0 && (
@@ -272,127 +278,55 @@ export default function Blogs() {
           </div>
         </div>
 
-        {/* Right — detail / form */}
-        <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
-          {mode === "create" ? (
-            <div>
-              <div className="text-sm text-muted-foreground">Create post</div>
-              <PostForm
-                activeEvents={activeEvents}
-                authorId={session!.user.id}
-                familyId={activeFamilyId}
-                enableVideoUpload={enableVideoUpload}
-                onCancel={cancel}
-                onSave={async (payload) => {
-                  const { familyId: fid, ...rest } = payload;
-                  const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
-                  setPosts((prev) => [created, ...prev]);
-                  setSelectedId(created.id);
-                  setMode("none");
-                }}
-              />
-            </div>
-          ) : mode === "edit" && selected && canEdit ? (
-            <div>
-              <div className="text-sm text-muted-foreground">Edit post</div>
-              <PostForm
-                post={selected}
-                activeEvents={activeEvents}
-                authorId={session!.user.id}
-                familyId={activeFamilyId}
-                enableVideoUpload={enableVideoUpload}
-                onCancel={cancel}
-                onSave={async (payload) => {
-                  // Strip familyId — family association managed via story_families junction (ADR-009)
-                  const { familyId: _fid, ...rest } = payload;
-                  const updated = await updateUpdate(selected.id, rest);
-                  setPosts((prev) =>
-                    prev.map((p) => (p.id === selected.id ? { ...p, ...updated } : p)),
-                  );
-                  setMode("none");
-                }}
-                onDelete={async () => {
-                  await deleteUpdate(selected.id);
-                  setPosts((prev) => prev.filter((p) => p.id !== selected.id));
-                  setSelectedId(null);
-                  setMode("none");
-                }}
-              />
-            </div>
-          ) : selected ? (
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-sm text-muted-foreground">Selected post</div>
-                {/* Copy link — all except private (private = author only, no sharing) */}
-                {selected.visibility !== "private" && (
-                  <CopyLinkButton
-                    storyId={selected.id}
-                    dim={selected.visibility === "family"}
-                    tooltip={
-                      selected.visibility === "family"
-                        ? "Copy link (family members need to sign in to view)"
-                        : selected.visibility === "open"
-                        ? "Copy link (registered users can view)"
-                        : "Copy public link"
-                    }
-                  />
-                )}
+        {/* Right — create / edit form */}
+        {(mode === "create" || mode === "edit") && (
+          <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
+            {mode === "create" ? (
+              <div>
+                <div className="text-sm text-muted-foreground">Create post</div>
+                <PostForm
+                  activeEvents={activeEvents}
+                  authorId={session!.user.id}
+                  familyId={activeFamilyId}
+                  enableVideoUpload={enableVideoUpload}
+                  onCancel={cancel}
+                  onSave={async (payload) => {
+                    const { familyId: fid, ...rest } = payload;
+                    const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
+                    setPosts((prev) => [created, ...prev]);
+                    navigate(`/stories/${created.id}`);
+                  }}
+                />
               </div>
-              <div className="mt-1 text-lg font-semibold">{selected.title}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                By {selected.profiles?.full_name ?? "Family Member"} •{" "}
-                {fmtDate(selected.created_at)} •{" "}
-                <Badge variant="secondary">
-                  {VISIBILITY_LABELS[selected.visibility]?.icon} {VISIBILITY_LABELS[selected.visibility]?.label ?? selected.visibility}
-                </Badge>
+            ) : mode === "edit" && selected && canEdit ? (
+              <div>
+                <div className="text-sm text-muted-foreground">Edit post</div>
+                <PostForm
+                  post={selected}
+                  activeEvents={activeEvents}
+                  authorId={session!.user.id}
+                  familyId={activeFamilyId}
+                  enableVideoUpload={enableVideoUpload}
+                  onCancel={() => { cancel(); navigate(`/stories/${selected.id}`); }}
+                  onSave={async (payload) => {
+                    const { familyId: _fid, ...rest } = payload;
+                    const updated = await updateUpdate(selected.id, rest);
+                    setPosts((prev) =>
+                      prev.map((p) => (p.id === selected.id ? { ...p, ...updated } : p)),
+                    );
+                    navigate(`/stories/${selected.id}`);
+                  }}
+                  onDelete={async () => {
+                    await deleteUpdate(selected.id);
+                    setPosts((prev) => prev.filter((p) => p.id !== selected.id));
+                    setSelectedId(null);
+                    cancel();
+                  }}
+                />
               </div>
-              {selected.events && (
-                <Badge variant="outline" className="mt-2 text-amber-700 border-amber-300 bg-amber-50 text-xs">
-                  🎉 {selected.events.title}
-                </Badge>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selected.hashtags.map((t) => (
-                  <Badge key={t} variant="outline">#{t}</Badge>
-                ))}
-              </div>
-              {selected.image_url && (
-                <MediaPreview url={selected.image_url} className="mt-3 w-full rounded-lg object-cover max-h-40" />
-              )}
-              <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">
-                {selected.content}
-              </p>
-              {canEdit && (
-                <div className="mt-3">
-                  <Button size="sm" onClick={startEdit}>
-                    Modify Post
-                  </Button>
-                </div>
-              )}
-              {selected.comments_enabled && (
-                <div className="mt-5 pt-5 border-t">
-                  <CommentThread
-                    parentId={selected.id}
-                    parentType="story"
-                    familyId={activeFamilyId}
-                    session={session}
-                    enableVideoUpload={enableVideoUpload}
-                    onCommentCountChange={(delta) =>
-                      setCommentCounts((prev) => ({
-                        ...prev,
-                        [selected.id]: Math.max(0, (prev[selected.id] ?? 0) + delta),
-                      }))
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              Select a post to see details.
-            </div>
-          )}
-        </aside>
+            ) : null}
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -402,12 +336,10 @@ export default function Blogs() {
 
 function PostCard({
   post,
-  active,
   commentCount,
   onSelect,
 }: {
   post: Update;
-  active?: boolean;
   commentCount?: number;
   onSelect: () => void;
 }) {
@@ -415,7 +347,7 @@ function PostCard({
   return (
     <button
       onClick={onSelect}
-      className={`text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md ${active ? "ring-2 ring-primary/30" : ""}`}
+      className="text-left rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md hover:ring-2 hover:ring-primary/20"
     >
       {post.image_url && (
         <MediaPreview url={post.image_url} className="w-full h-28 object-cover rounded-lg mb-3" />
