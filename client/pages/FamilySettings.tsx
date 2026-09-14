@@ -315,6 +315,7 @@ function InvitesTab({ family, onRotated }: { family: any; onRotated: () => Promi
   const [invitations, setInvitations] = useState<any[]>([]);
   const [generating, setGenerating] = useState(false);
   const [rotating, setRotating]     = useState(false);
+  const [showRotateConfirm, setShowRotateConfirm] = useState(false);
   const [copied, setCopied]          = useState<string | null>(null);
 
   const groupLink    = `${BASE_URL}/join/${family.invite_code}`;
@@ -341,10 +342,9 @@ function InvitesTab({ family, onRotated }: { family: any; onRotated: () => Promi
   }
 
   async function handleRotate() {
-    if (!confirm("Rotate group invite code? The old link will stop working.")) return;
     setRotating(true);
     try { await rotateInviteCode(family.id); await onRotated(); }
-    finally { setRotating(false); }
+    finally { setRotating(false); setShowRotateConfirm(false); }
   }
 
   function copyToClipboard(text: string, key: string) {
@@ -366,9 +366,17 @@ function InvitesTab({ family, onRotated }: { family: any; onRotated: () => Promi
           <Button size="sm" variant="outline" onClick={() => copyToClipboard(groupLink, "group")}>
             {copied === "group" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleRotate} disabled={rotating} title="Rotate code — old link stops working">
-            <RefreshCw className={`h-4 w-4 ${rotating ? "animate-spin" : ""}`} />
-          </Button>
+          {!showRotateConfirm ? (
+            <Button size="sm" variant="outline" onClick={() => setShowRotateConfirm(true)} title="Rotate code — old link stops working">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs">
+              <span className="text-amber-800">Old link breaks.</span>
+              <button onClick={handleRotate} disabled={rotating} className="text-destructive font-medium hover:underline">Rotate</button>
+              <button onClick={() => setShowRotateConfirm(false)} className="text-muted-foreground hover:underline">Cancel</button>
+            </div>
+          )}
         </div>
       </div>
 

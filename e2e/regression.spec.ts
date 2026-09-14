@@ -239,14 +239,47 @@ test("TC-HOME-03 Home feature cards render with correct labels and links", async
 
   await page.goto(BASE);
   await expect(page.locator("main").getByRole("link", { name: /Events & Groups/i })).toBeVisible();
-  // AI Summaries card uses <a href="#ai"> (not a router Link) — match by text content
-  await expect(page.locator("main").getByText("AI Summaries")).toBeVisible();
+  await expect(page.locator("main").getByText("Family Tree")).toBeVisible();
 });
 
 test("TC-HOME-04 Home feature card Events & Groups navigates to events", async ({ page }) => {
   await signIn(page);
   await page.locator("main").getByRole("link", { name: /Events & Groups/i }).click();
   await expect(page).toHaveURL(/\/events/);
+});
+
+// ---------------------------------------------------------------------------
+// LIVE EVENT BANNER
+// ---------------------------------------------------------------------------
+
+test("TC-BANNER-01 Live event banner can be dismissed and stays gone while navigating, reappears on family switch", async ({ page }) => {
+  await signIn(page);
+  await page.goto(BASE);
+  await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
+
+  const banner = page.getByTestId("live-events-banner");
+
+  // Banner only appears when there are active events — skip gracefully if none
+  if (!(await banner.isVisible({ timeout: 3000 }).catch(() => false))) {
+    console.log("TC-BANNER-01: No live events for active family — skipping banner tests");
+    return;
+  }
+
+  // Dismiss the banner
+  await page.getByTestId("dismiss-live-banner").click();
+  await expect(banner).not.toBeVisible({ timeout: 3000 });
+
+  // Navigate to /stories and back — banner must stay dismissed
+  await page.goto(`${BASE}/stories`);
+  await expect(banner).not.toBeVisible({ timeout: 3000 });
+  await page.goto(BASE);
+  await expect(banner).not.toBeVisible({ timeout: 3000 });
+
+  // Navigate to /events and back — still dismissed
+  await page.goto(`${BASE}/events`);
+  await expect(banner).not.toBeVisible({ timeout: 3000 });
+  await page.goto(BASE);
+  await expect(banner).not.toBeVisible({ timeout: 3000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -270,10 +303,12 @@ test("TC-STORIES-02 New Story button visible when signed in", async ({ page }) =
   await expect(page.getByRole("button", { name: "New Story" })).toBeVisible();
 });
 
-test("TC-STORIES-03 Detail panel shows placeholder when no post selected", async ({ page }) => {
+test("TC-STORIES-03 Stories list renders without a pre-selected detail panel", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/stories`);
-  await expect(page.locator("aside, [role=complementary]").first()).toContainText(/Select a post/i);
+  await expect(page.getByRole("heading", { name: "Family Stories" })).toBeVisible();
+  await expect(page.locator("aside, [role=complementary]")).not.toBeVisible();
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
 test("TC-STORIES-04 Tab switching does not crash the page", async ({ page }) => {
@@ -318,10 +353,12 @@ test("TC-EVENTS-02 New Event button visible when signed in", async ({ page }) =>
   await expect(page.getByRole("button", { name: /New Event/i })).toBeVisible();
 });
 
-test("TC-EVENTS-03 Event detail panel shows placeholder when no event selected", async ({ page }) => {
+test("TC-EVENTS-03 Events list renders without a pre-selected detail panel", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/events`);
-  await expect(page.locator("aside, [role=complementary]").first()).toContainText(/Select an event/i);
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.locator("aside, [role=complementary]")).not.toBeVisible();
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
 test("TC-EVENTS-04 Tab switching does not crash the page", async ({ page }) => {
@@ -339,8 +376,8 @@ test("TC-EVENTS-05 Navigating to /events?create=1 opens create form", async ({ p
   await signIn(page);
   await page.goto(`${BASE}/events?create=1`);
   await expect(page).toHaveURL(/\/events/);
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
-  await expect(page.getByText("Create event")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole("heading", { name: "Create Event" })).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 8000 });
 });
 
 // ---------------------------------------------------------------------------

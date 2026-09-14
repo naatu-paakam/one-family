@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Sparkles, Link2, Check, Trash2 } from "lucide-react";
+import { Loader2, Plus, Sparkles, Link2, Check, Trash2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -33,6 +33,7 @@ type FamilyEvent = {
   title: string;
   description: string | null;
   location: string | null;
+  duration: string | null;
   started_at: string | null;
   closed_at: string | null;
   created_by: string;
@@ -238,6 +239,66 @@ export default function Events() {
     return <Navigate to="/" replace />;
   }
 
+  // Full-width create form
+  if (mode === "create") {
+    const defaultStart = tab === "upcoming" ? (() => {
+      const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0);
+      return d.toISOString().slice(0, 16);
+    })() : "";
+    return (
+      <div className="container py-8 max-w-2xl mx-auto">
+        <button
+          onClick={() => setMode("none")}
+          className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Events
+        </button>
+        <h1 className="text-2xl font-bold mb-4">Create Event</h1>
+        <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <CreateEventForm
+            defaultStartedAt={defaultStart}
+            onCancel={() => setMode("none")}
+            onSave={async ({ title, description, location, duration, visibility, started_at }) => {
+              await startEvent({ title, description, location, duration: duration || null, visibility, started_at: started_at || null });
+              setMode("none");
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Full-width edit form — shown instead of list when editing
+  if (mode === "edit" && selected) {
+    return (
+      <div className="container py-8 max-w-2xl mx-auto">
+        <button
+          onClick={() => { setMode("none"); navigate(`/events/${selected.id}`); }}
+          className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to event
+        </button>
+        <h1 className="text-2xl font-bold mb-1">Modify Event</h1>
+        <p className="text-sm text-muted-foreground mb-4">{selected.title}</p>
+        <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <ModifyEventForm
+            event={selected}
+            canDelete={isFamilyAdmin || selected.created_by === session?.user?.id}
+            onCancel={() => { setMode("none"); navigate(`/events/${selected.id}`); }}
+            onSave={async (patch) => { await handleModifyEvent(selected.id, patch); navigate(`/events/${selected.id}`); }}
+            onDelete={async () => {
+              await deleteEvent(selected.id);
+              setAllEvents((prev) => prev.filter((e) => e.id !== selected.id));
+              setSelectedId(null);
+              setMode("none");
+              navigate("/events");
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-8">
       <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_360px]">
@@ -312,39 +373,6 @@ export default function Events() {
           </div>
         </div>
 
-        {/* Right — create / edit form */}
-        {(mode === "create" || mode === "edit") && (
-          <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
-            {mode === "create" ? (
-              <div>
-                <div className="text-sm text-muted-foreground">Create event</div>
-                <CreateEventForm
-                  onCancel={() => setMode("none")}
-                  onSave={async ({ title, description, location, visibility }) => {
-                    await startEvent({ title, description, location, visibility });
-                    setMode("none");
-                  }}
-                />
-              </div>
-            ) : mode === "edit" && selected ? (
-              <div>
-                <div className="text-sm text-muted-foreground">Modify event</div>
-                <ModifyEventForm
-                  event={selected}
-                  canDelete={isFamilyAdmin || selected.created_by === session?.user?.id}
-                  onCancel={() => { setMode("none"); navigate(`/events/${selected.id}`); }}
-                  onSave={async (patch) => { await handleModifyEvent(selected.id, patch); navigate(`/events/${selected.id}`); }}
-                  onDelete={async () => {
-                    await deleteEvent(selected.id);
-                    setAllEvents((prev) => prev.filter((e) => e.id !== selected.id));
-                    setSelectedId(null);
-                    setMode("none");
-                  }}
-                />
-              </div>
-            ) : null}
-          </aside>
-        )}
       </div>
     </div>
   );
@@ -420,14 +448,11 @@ function EventCard({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <Badge variant="secondary">{cat}</Badge>
-          {ev.visibility && ev.visibility !== "family" && (
-            <span className="text-[10px] text-muted-foreground">
-              {ev.visibility === "open" ? "👥 Open" : "🌐 Public"}
-            </span>
-          )}
-          {ev.visibility === "family" && (
-            <span className="text-[10px] text-muted-foreground">❤️ Family</span>
+          <Badge variant="secondary" className="whitespace-nowrap">{cat}</Badge>
+          {ev.visibility && (
+            <Badge variant="outline" className="whitespace-nowrap">
+              {ev.visibility === "family" ? "❤️ Family" : ev.visibility === "open" ? "👥 Open" : "🌐 Public"}
+            </Badge>
           )}
         </div>
       </div>
@@ -716,6 +741,11 @@ function ModifyEventForm({
   const [title, setTitle]       = useState(event.title);
   const [description, setDesc]  = useState(event.description ?? "");
   const [location, setLocation] = useState(event.location ?? "");
+  const [duration, setDuration] = useState(event.duration ?? "");
+  const initStarted = event.started_at ? new Date(event.started_at).toISOString().slice(0, 16) : "";
+  const initMode = event.started_at && new Date(event.started_at).getTime() > Date.now() ? "upcoming" : "live";
+  const [statusMode, setStatusMode] = useState<"live" | "upcoming">(initMode);
+  const [startedAt, setStartedAt] = useState(initStarted);
   const [visibility, setVisibility] = useState<"family" | "open" | "public">(event.visibility ?? "family");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
@@ -729,6 +759,8 @@ function ModifyEventForm({
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
+        duration: duration.trim() || null,
+        started_at: startedAt ? new Date(startedAt).toISOString() : null,
         visibility,
       });
     } catch (err: any) {
@@ -743,6 +775,45 @@ function ModifyEventForm({
       <label className="grid gap-1">
         <span className="text-xs text-muted-foreground">Title</span>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Event status</p>
+        <div className="flex gap-2">
+          {([
+            { value: "live",     label: "🔴 Live now",  desc: "Event is happening now" },
+            { value: "upcoming", label: "📅 Upcoming",   desc: "Schedule for a future date" },
+          ] as const).map(({ value, label, desc }) => (
+            <button key={value} type="button" title={desc}
+              onClick={() => {
+                setStatusMode(value);
+                if (value === "live") { setStartedAt(""); }
+                else if (!startedAt) {
+                  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0);
+                  setStartedAt(d.toISOString().slice(0, 16));
+                }
+              }}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                statusMode === value ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {statusMode === "upcoming" && (
+        <label className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Start date &amp; time</span>
+          <input
+            type="datetime-local"
+            value={startedAt}
+            onChange={(e) => setStartedAt(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </label>
+      )}
+      <label className="grid gap-1">
+        <span className="text-xs text-muted-foreground">Duration <span className="font-normal opacity-60">(e.g. 2 hours, all day)</span></span>
+        <Input placeholder="e.g. 2 hours, all day, 30 min" value={duration} onChange={(e) => setDuration(e.target.value)} />
       </label>
       <label className="grid gap-1">
         <span className="text-xs text-muted-foreground">Location</span>
@@ -818,15 +889,20 @@ function ModifyEventForm({
 /* ── CreateEventForm ────────────────────────────────────────────────────────── */
 
 function CreateEventForm({
+  defaultStartedAt = "",
   onCancel,
   onSave,
 }: {
+  defaultStartedAt?: string;
   onCancel: () => void;
-  onSave: (args: { title: string; description: string; location: string; visibility: "family" | "open" | "public" }) => Promise<void>;
+  onSave: (args: { title: string; description: string; location: string; duration: string; visibility: "family" | "open" | "public"; started_at: string }) => Promise<void>;
 }) {
   const [title, setTitle]       = useState("New Event");
   const [description, setDesc]  = useState("");
   const [location, setLocation] = useState("");
+  const [duration, setDuration] = useState("");
+  const [statusMode, setStatusMode] = useState<"live" | "upcoming">(defaultStartedAt ? "upcoming" : "live");
+  const [startedAt, setStartedAt] = useState(defaultStartedAt);
   const [visibility, setVisibility] = useState<"family" | "open" | "public">("family");
   const [loading, setLoading]   = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -853,7 +929,7 @@ function CreateEventForm({
     if (!title.trim()) { setError("Title is required"); return; }
     setLoading(true);
     try {
-      await onSave({ title: title.trim(), description: description.trim(), location: location.trim(), visibility });
+      await onSave({ title: title.trim(), description: description.trim(), location: location.trim(), duration: duration.trim(), visibility, started_at: startedAt });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -866,6 +942,45 @@ function CreateEventForm({
       <label className="grid gap-1">
         <span className="text-xs text-muted-foreground">Title</span>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5">Event status</p>
+        <div className="flex gap-2">
+          {([
+            { value: "live",     label: "🔴 Live now",  desc: "Event is happening now" },
+            { value: "upcoming", label: "📅 Upcoming",   desc: "Schedule for a future date" },
+          ] as const).map(({ value, label, desc }) => (
+            <button key={value} type="button" title={desc}
+              onClick={() => {
+                setStatusMode(value);
+                if (value === "live") { setStartedAt(""); }
+                else if (!startedAt) {
+                  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0);
+                  setStartedAt(d.toISOString().slice(0, 16));
+                }
+              }}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                statusMode === value ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {statusMode === "upcoming" && (
+        <label className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Start date &amp; time</span>
+          <input
+            type="datetime-local"
+            value={startedAt}
+            onChange={(e) => setStartedAt(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </label>
+      )}
+      <label className="grid gap-1">
+        <span className="text-xs text-muted-foreground">Duration <span className="font-normal opacity-60">(e.g. 2 hours, all day)</span></span>
+        <Input placeholder="e.g. 2 hours, all day, 30 min" value={duration} onChange={(e) => setDuration(e.target.value)} />
       </label>
       <label className="grid gap-1">
         <span className="text-xs text-muted-foreground">Location</span>

@@ -242,17 +242,16 @@ test("TC-16 Stories page shows Edit and Delete for story author (uses seed story
   const seedCard = page.locator("main").locator("button, [class*='cursor']").filter({ hasText: /\[SEED\] Family story/ });
   await expect(seedCard.first()).toBeVisible({ timeout: 8000 });
   await seedCard.first().click();
-  await page.waitForTimeout(500);
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
 
-  // Modify Post button visible (author = test user = family admin)
-  const aside = page.locator("aside, [role=complementary]").first();
-  await expect(aside.getByRole("button", { name: /Modify Post/i })).toBeVisible({ timeout: 5000 });
+  // Modify Post button visible on the story page (author = test user = family admin)
+  await expect(page.getByRole("button", { name: /Modify Post/i })).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
 // ── TC-17: Events — Close Event visible for creator or admin ─────────────────
 
-test("TC-17 Events page Close Event button visible for creator (uses seed event)", async ({ page }) => {
+test("TC-17 Events page — clicking seed event card navigates to event detail page", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/events`);
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
@@ -266,11 +265,11 @@ test("TC-17 Events page Close Event button visible for creator (uses seed event)
   const seedCard = page.locator("[role=tabpanel]").locator("button, [class*='cursor-pointer']").filter({ hasText: /\[SEED\] Ongoing Test Event/ });
   await expect(seedCard.first()).toBeVisible({ timeout: 8000 });
   await seedCard.first().click();
-  await page.waitForTimeout(500);
 
-  // Close Event button visible (creator = test user = family admin)
-  const aside = page.locator("aside, [role=complementary]").first();
-  await expect(aside.getByRole("button", { name: /Close Event/i })).toBeVisible({ timeout: 5000 });
+  // Should navigate to /events/:id full page
+  await page.waitForURL(/\/events\/.+/, { timeout: 8000 });
+  await expect(page.getByText(/\[SEED\] Ongoing Test Event/i)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText("Back to Events")).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 

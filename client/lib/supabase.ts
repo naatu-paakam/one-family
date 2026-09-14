@@ -230,9 +230,10 @@ export async function uploadImage(file: File, familyId?: string | null) {
 export async function fetchActiveEvents(familyId?: string | null) {
   if (isDemo) return []
   // family_id column removed (ADR-009) — filter via event_families junction table
+  // !inner forces an INNER JOIN so only events belonging to this family are returned
   let query = supabase
     .from('events')
-    .select('*, event_families(family_id)')
+    .select('*, event_families!inner(family_id)')
     .is('closed_at', null)
     .order('started_at', { ascending: true })
   if (familyId) query = query.eq('event_families.family_id', familyId)
@@ -253,9 +254,9 @@ export async function fetchAllEvents(familyId?: string | null) {
   return data ?? []
 }
 
-export async function createEvent({ title, description, location = null, familyId = null, visibility = 'family' }: {
-  title: string; description?: string; location?: string | null
-  familyId?: string | null; visibility?: EventVisibility
+export async function createEvent({ title, description, location = null, duration = null, familyId = null, visibility = 'family', started_at = null }: {
+  title: string; description?: string; location?: string | null; duration?: string | null
+  familyId?: string | null; visibility?: EventVisibility; started_at?: string | null
 }) {
   const userId = (await supabase.auth.getUser()).data.user?.id
   // Step 1: bare INSERT — no .select() so PostgREST doesn't append RETURNING *.
@@ -263,7 +264,7 @@ export async function createEvent({ title, description, location = null, familyI
   const newId = crypto.randomUUID()
   const { error: insertError } = await supabase
     .from('events')
-    .insert({ id: newId, title, description, location, created_by: userId, visibility })
+    .insert({ id: newId, title, description, location, duration, created_by: userId, visibility, started_at })
   if (insertError) throw insertError
 
   // Step 2: link to family (visibility='family' or any) — creates the event_families row.

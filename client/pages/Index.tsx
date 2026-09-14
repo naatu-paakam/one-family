@@ -236,25 +236,36 @@ export default function Index() {
           </div>
           <div className="rounded-2xl border bg-card p-6">
             <h3 className="font-semibold">
-              {activeEvents.length > 0 ? "Active Events" : "Events"}
+              {activeEvents.length > 0 ? "Events" : "Events"}
             </h3>
             <div className="mt-4 grid gap-4">
               {activeEvents.length > 0 ? (
-                activeEvents.map((ev) => (
-                  <div key={ev.id} className="rounded-xl border bg-background p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{ev.title}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Started {ev.started_at ? format(new Date(ev.started_at), "MMM d") : "recently"}
+                activeEvents.map((ev) => {
+                  const isUpcoming = ev.started_at && new Date(ev.started_at).getTime() > Date.now();
+                  return (
+                    <div key={ev.id} className="rounded-xl border bg-background p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{ev.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {isUpcoming
+                              ? `Starts ${ev.started_at ? format(new Date(ev.started_at), "MMM d") : "soon"}`
+                              : `Started ${ev.started_at ? format(new Date(ev.started_at), "MMM d") : "recently"}`}
+                          </div>
                         </div>
+                        {isUpcoming ? (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs">
+                            Upcoming
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-xs">
+                            Live
+                          </Badge>
+                        )}
                       </div>
-                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-xs">
-                        Live
-                      </Badge>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                   <CalendarPlus className="h-8 w-8 mb-2 opacity-30" />

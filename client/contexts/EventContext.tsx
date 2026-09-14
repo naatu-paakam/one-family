@@ -17,7 +17,7 @@ interface FamilyEvent {
 interface EventContextValue {
   activeEvents: FamilyEvent[]
   loading: boolean
-  startEvent: (args: { title: string; description: string; location?: string; visibility?: 'family' | 'open' | 'public' }) => Promise<FamilyEvent>
+  startEvent: (args: { title: string; description: string; location?: string; duration?: string | null; visibility?: 'family' | 'open' | 'public'; started_at?: string | null }) => Promise<FamilyEvent>
   endEvent: (id: string) => Promise<void>
   refresh: () => Promise<void>
 }
@@ -42,8 +42,8 @@ export function EventProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  async function startEvent({ title, description, location, visibility = 'family' }: { title: string; description: string; location?: string; visibility?: 'family' | 'open' | 'public' }) {
-    const ev = await createEvent({ title, description, location, familyId: activeFamilyId, visibility })
+  async function startEvent({ title, description, location, duration, visibility = 'family', started_at }: { title: string; description: string; location?: string; duration?: string | null; visibility?: 'family' | 'open' | 'public'; started_at?: string | null }) {
+    const ev = await createEvent({ title, description, location, duration, familyId: activeFamilyId, visibility, started_at })
     setActiveEvents(prev => [...prev, ev])
     return ev
   }

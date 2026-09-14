@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, Sparkles, Link2, Check } from "lucide-react";
+import { Plus, Loader2, Sparkles, Link2, Check, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -207,6 +207,36 @@ export default function Blogs() {
     return <Navigate to="/" replace />;
   }
 
+  // Full-width create form
+  if (mode === "create") {
+    return (
+      <div className="container py-8 max-w-2xl mx-auto">
+        <button
+          onClick={cancel}
+          className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Stories
+        </button>
+        <h1 className="text-2xl font-bold mb-4">New Story</h1>
+        <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <PostForm
+            activeEvents={activeEvents}
+            authorId={session!.user.id}
+            familyId={activeFamilyId}
+            enableVideoUpload={enableVideoUpload}
+            onCancel={cancel}
+            onSave={async (payload) => {
+              const { familyId: fid, ...rest } = payload;
+              const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
+              setPosts((prev) => [created, ...prev]);
+              navigate(`/stories/${created.id}`);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-8">
       <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_360px]">
@@ -278,27 +308,10 @@ export default function Blogs() {
           </div>
         </div>
 
-        {/* Right — create / edit form */}
-        {(mode === "create" || mode === "edit") && (
+        {/* Right — edit form */}
+        {mode === "edit" && (
           <aside className="md:sticky md:top-20 h-max rounded-xl border bg-card p-5 shadow-sm">
-            {mode === "create" ? (
-              <div>
-                <div className="text-sm text-muted-foreground">Create post</div>
-                <PostForm
-                  activeEvents={activeEvents}
-                  authorId={session!.user.id}
-                  familyId={activeFamilyId}
-                  enableVideoUpload={enableVideoUpload}
-                  onCancel={cancel}
-                  onSave={async (payload) => {
-                    const { familyId: fid, ...rest } = payload;
-                    const created = await createUpdate({ ...rest, familyId: fid ?? activeFamilyId });
-                    setPosts((prev) => [created, ...prev]);
-                    navigate(`/stories/${created.id}`);
-                  }}
-                />
-              </div>
-            ) : mode === "edit" && selected && canEdit ? (
+            {mode === "edit" && selected && canEdit ? (
               <div>
                 <div className="text-sm text-muted-foreground">Edit post</div>
                 <PostForm
@@ -359,7 +372,7 @@ function PostCard({
             By {author} • {fmtDate(post.created_at)}
           </div>
         </div>
-        <Badge variant={post.visibility === "private" ? "outline" : "secondary"}>
+        <Badge variant={post.visibility === "private" ? "outline" : "secondary"} className="shrink-0 whitespace-nowrap">
           {VISIBILITY_LABELS[post.visibility]?.icon} {VISIBILITY_LABELS[post.visibility]?.label ?? post.visibility}
         </Badge>
       </div>

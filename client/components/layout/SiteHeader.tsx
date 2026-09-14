@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEvent } from "@/contexts/EventContext";
-import { LogOut, PenSquare, CalendarPlus, BookOpen, CalendarDays, TreePine, Settings, Shield } from "lucide-react";
+import { LogOut, PenSquare, CalendarPlus, BookOpen, CalendarDays, TreePine, Settings, Shield, X } from "lucide-react";
 import FamilyMenu from "./FamilyMenu";
 import { useFamily } from "@/contexts/FamilyContext";
 
@@ -184,9 +184,13 @@ function CreateEventModal({ open, onClose }: { open: boolean; onClose: () => voi
 export default function SiteHeader() {
   const location = useLocation();
   const { session, profile, signOut, authModalOpen, openAuthModal, closeAuthModal, isPortalAdmin } = useAuth();
-  const { activeEvents, endEvent } = useEvent();
-  const { activeFamily, isFamilyAdmin } = useFamily();
+  const { activeEvents } = useEvent();
+  const { activeFamily, isFamilyAdmin, activeFamilyId } = useFamily();
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Reset banner dismissal whenever the active family changes
+  useEffect(() => { setBannerDismissed(false); }, [activeFamilyId]);
 
   const avatar = profile?.avatar_url || session?.user?.user_metadata?.picture || session?.user?.user_metadata?.avatar_url;
   const displayName = profile?.full_name || session?.user?.email || "Family Member";
@@ -287,18 +291,23 @@ export default function SiteHeader() {
           </div>
         </div>
 
-        {activeEvents.length > 0 && (
-          <div className="border-t bg-amber-50 px-4 py-1.5 flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-amber-700 font-medium">Live events:</span>
+        {activeEvents.length > 0 && !bannerDismissed && (
+          <div className="border-t bg-amber-50 px-4 py-1.5 flex items-center gap-2 flex-wrap" data-testid="live-events-banner">
+            <span className="text-xs text-amber-700 font-medium shrink-0">Live events:</span>
             {activeEvents.map((ev) => (
-              <Badge key={ev.id} variant="outline" className="gap-1 bg-amber-100 border-amber-300 text-amber-800 text-xs">
+              <Badge key={ev.id} variant="outline" className="bg-amber-100 border-amber-300 text-amber-800 text-xs">
                 🎉 {ev.title}
-                {session && (
-                  <button onClick={() => { if (confirm(`Close event "${ev.title}"?`)) endEvent(ev.id); }}
-                    className="ml-0.5 opacity-60 hover:opacity-100 transition" title="Close event">✕</button>
-                )}
               </Badge>
             ))}
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="ml-auto shrink-0 text-amber-600 hover:text-amber-900 transition"
+              title="Dismiss"
+              aria-label="Dismiss live events banner"
+              data-testid="dismiss-live-banner"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
       </header>

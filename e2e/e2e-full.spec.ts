@@ -60,22 +60,21 @@ test("E2E-HOME-01 Logged-out home: hero, CTAs, sample tree preview, feature card
   // Feature cards — use first() to avoid strict mode with footer links
   await expect(page.getByText("Member Stories").first()).toBeVisible();
   await expect(page.getByText("Events & Groups").first()).toBeVisible();
-  await expect(page.getByText("AI Summaries").first()).toBeVisible();
+  await expect(page.getByText("Family Tree").first()).toBeVisible();
 
   // "Explore →" links
   await expect(page.locator("main").getByText("Explore →").first()).toBeVisible();
 });
 
-test("E2E-HOME-02 Logged-out: AI Summaries Explore→ scrolls to Summary section", async ({ page }) => {
+test("E2E-HOME-02 Logged-out: Family Tree Explore→ navigates to /family-tree", async ({ page }) => {
+  await signIn(page);
   await page.goto(BASE);
-  // Click AI Summaries Explore → (uses smooth scroll, not route change)
+  // Click Family Tree Explore → (3rd feature card — now a router Link)
   const cards = page.locator("main").getByText("Explore →");
   const count = await cards.count();
   if (count >= 3) {
-    await cards.nth(2).click(); // AI Summaries is 3rd card
-    await page.waitForTimeout(800);
-    // Summary section should be visible after scroll
-    await expect(page.getByText("Summary of family activity")).toBeVisible();
+    await cards.nth(2).click();
+    await expect(page).toHaveURL(/\/family-tree/);
   }
 });
 
@@ -163,7 +162,7 @@ test("E2E-NAV-05 Unknown route shows 404", async ({ page }) => {
 // ── STORIES PAGE
 // ── ═══════════════════════════════════════════════════════════════════════════
 
-test("E2E-STORIES-01 Stories page: heading, search, tabs, detail panel", async ({ page }) => {
+test("E2E-STORIES-01 Stories page: heading, search, tabs visible", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/stories`);
 
@@ -172,22 +171,22 @@ test("E2E-STORIES-01 Stories page: heading, search, tabs, detail panel", async (
   for (const tab of ["All", "Published", "Drafts"]) {
     await expect(page.getByRole("tab", { name: tab })).toBeVisible();
   }
-  await expect(page.locator("aside, [role=complementary]").first()).toContainText(/Select a post/i);
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
-test("E2E-STORIES-02 New Story button opens editor with visibility picker", async ({ page }) => {
+test("E2E-STORIES-02 New Story button opens full-page editor with visibility picker", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/stories`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  await page.locator("main").getByRole("button", { name: "New Story" }).first().click();
-  await expect(page.getByText("Visibility")).toBeVisible({ timeout: 5000 });
-  // All 4 compact visibility chips shown
-  await expect(page.getByText("Private to you")).toBeVisible();
-  await expect(page.getByText("to Family")).toBeVisible();
-  await expect(page.getByText("All users")).toBeVisible();
-  // Default = private → Save draft
+  await page.getByRole("button", { name: "New Post" }).first().click();
+  await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 5000 });
+  // Family chip (default)
+  await expect(page.getByRole("button", { name: /❤️ Family/i }).first()).toBeVisible();
+  // Default is private — Save draft button visible
   await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+  // Old label must not appear
+  await expect(page.getByText("to Family")).not.toBeVisible();
 });
 
 test("E2E-STORIES-03 Tab switching All/Published/Drafts does not crash", async ({ page }) => {

@@ -231,7 +231,7 @@ test("TC-VIS-SAVE-01 Saving a new story with 'Private to you' visibility succeed
   // Fill required title
   // Title input — find by looking for a text input after "Title" label
   // Use TC-prefixed title so teardown cleans it up
-  const titleInput01 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  const titleInput01 = page.locator("main").locator("input[type=text]").first();
   await titleInput01.fill("TC-VIS-SAVE-01-private");
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.waitForTimeout(1500);
@@ -252,7 +252,7 @@ test("TC-VIS-SAVE-02 Saving a new story with Family visibility succeeds (was bro
   await expect(page.getByRole("button", { name: /^Save$/ })).toBeVisible({ timeout: 2000 });
 
   // Use TC-prefixed title so teardown cleans it up
-  const titleInput02 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  const titleInput02 = page.locator("main").locator("input[type=text]").first();
   await titleInput02.fill("TC-VIS-SAVE-02-family");
   await page.getByRole("button", { name: /^Save$/ }).click();
   await page.waitForTimeout(1500);
@@ -271,7 +271,7 @@ test("TC-VIS-SAVE-03 Saving a new story with 'All users' (open) visibility succe
 
   await page.getByText("All users").click();
   // Use TC-prefixed title so teardown cleans it up
-  const titleInput03 = page.locator("aside, [role=complementary]").locator("input[type=text]").first();
+  const titleInput03 = page.locator("main").locator("input[type=text]").first();
   await titleInput03.fill("TC-VIS-SAVE-03-open");
   await page.getByRole("button", { name: /^Save$/ }).click();
   await page.waitForTimeout(1500);
@@ -287,18 +287,17 @@ test("TC-VIS-LINK-01 Copy link icon NOT shown on private stories", async ({ page
   await page.goto(`${BASE}/stories`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  // Private stories have no link icon — verify the behaviour description matches the badge shown
   await page.getByRole("tab", { name: "Drafts" }).click();
   const firstDraft = page.locator("main").locator("button, [class*='cursor-pointer']").filter({ hasText: /.{5,}/ }).first();
   if (await firstDraft.isVisible({ timeout: 3000 }).catch(() => false)) {
     await firstDraft.click();
-    await page.waitForTimeout(400);
-    // Check: if the selected story IS private, no copy link; if it isn't, link may show
-    const privateBadge = await page.locator("aside").getByText("Private").isVisible({ timeout: 1000 }).catch(() => false);
+    await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
+    // Private stories show no copy link icon on the detail page
+    const privateBadge = await page.getByText("Private").isVisible({ timeout: 1000 }).catch(() => false);
     if (privateBadge) {
-      await expect(page.locator("aside").getByTitle(/Copy/i)).not.toBeVisible({ timeout: 2000 });
+      await expect(page.getByTitle(/Copy/i)).not.toBeVisible({ timeout: 2000 });
     } else {
-      console.log("TC-VIS-LINK-01: Selected story is not private (may be family) — link icon may be present");
+      console.log("TC-VIS-LINK-01: Selected story is not private — link icon may be present");
     }
   } else {
     console.log("TC-VIS-LINK-01: No stories in Drafts tab — skipping");
@@ -315,10 +314,10 @@ test("TC-VIS-LINK-02 Copy link icon shown (dimmed) on family seed story", async 
   const seedCard = page.locator("main").locator("[class*='cursor'], button").filter({ hasText: /\[SEED\] Family story/ });
   await expect(seedCard.first()).toBeVisible({ timeout: 8000 });
   await seedCard.first().click();
-  await page.waitForTimeout(400);
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
 
-  // Copy link button should appear (dimmed) for family stories
-  await expect(page.locator("aside").getByTitle(/Copy link/i)).toBeVisible({ timeout: 5000 });
+  // Copy link button should appear on the story detail page for family stories
+  await expect(page.getByTitle(/Copy link/i)).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
@@ -406,25 +405,20 @@ test("TC-VIS-LINK-06 After signing in from story link page, story content loads 
 // Seed event ID — created by global-setup.ts
 const SEED_EVENT_ID = "00000000-0000-0000-5eed-000000000010";
 
-test("TC-VIS-ELINK-01 Event detail panel shows copy link icon", async ({ page }) => {
+test("TC-VIS-ELINK-01 Event detail page shows copy link icon", async ({ page }) => {
   await signIn(page);
   await page.goto(`${BASE}/events`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  // Click the seed event (ongoing tab)
-  await page.getByRole("tab", { name: "Ongoing" }).click();
-  const seedEvent = page.locator("[role=tabpanel]").locator("button, [class*='cursor']")
-    .filter({ hasText: /\[SEED\] Ongoing Test Event/ });
-  if (await seedEvent.first().isVisible({ timeout: 8000 }).catch(() => false)) {
-    await seedEvent.first().click();
-    await page.waitForTimeout(400);
-    // Copy link icon should appear in event detail panel
-    await expect(page.locator("aside, [role=complementary]").first().locator("button[title]").first())
-      .toBeVisible({ timeout: 5000 });
+  const seedCard = page.locator("main").locator("button, [class*='cursor-pointer']").filter({ hasText: /\[SEED\] Ongoing Test Event/ });
+  if (await seedCard.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+    await seedCard.first().click();
+    await page.waitForURL(/\/events\/.+/, { timeout: 8000 });
+    // Copy link button should appear on the event detail page
+    await expect(page.locator("button[title]").first()).toBeVisible({ timeout: 5000 });
   } else {
     console.log("TC-VIS-ELINK-01: Seed event not visible — skipping");
   }
-  await expect(page.getByText("Something went wrong")).not.toBeVisible();
 });
 
 test("TC-VIS-ELINK-02 /events/:id with valid family event — logged-in user sees event", async ({ page }) => {

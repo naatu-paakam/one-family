@@ -32,6 +32,7 @@ async function selectStory(page: Page, titleFragment: string) {
   await page.goto(`${BASE}/stories`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
   await page.getByText(titleFragment).first().click();
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
 }
 
 // ── Visibility gate — comments_enabled=false ──────────────────────────────────
@@ -65,8 +66,9 @@ test("TC-SCOM-04 Author can see Allow comments toggle in edit mode", async ({ pa
   await signIn(page);
   await selectStory(page, "[SEED] Family story");
 
-  // "Modify Post" opens the edit form
+  // "Modify Post" opens the edit form (navigates to /stories?edit=<id>)
   await page.getByRole("button", { name: "Modify Post" }).click();
+  await page.waitForURL(/\/stories(\?|$)/, { timeout: 8000 });
   await expect(page.getByText(/Allow comments/i)).toBeVisible({ timeout: 5000 });
 });
 
@@ -74,23 +76,28 @@ test("TC-SCOM-05 Author toggles comments on and off — comment form appears and
   await signIn(page);
   await selectStory(page, "[SEED] Family story");
 
-  // Verify no comment form initially
+  // Verify no comment form initially (story has comments disabled)
   await expect(page.getByPlaceholder("Add a comment…")).not.toBeVisible({ timeout: 3000 });
 
-  // Enable comments
+  // Enable comments — Modify Post navigates to /stories?edit=<id>
   await page.getByRole("button", { name: "Modify Post" }).click();
+  await page.waitForURL(/\/stories(\?|$)/, { timeout: 8000 });
   const toggle = page.locator("input[type=checkbox]").last();
   await expect(toggle).toBeVisible({ timeout: 5000 });
   await toggle.check();
   await page.getByRole("button", { name: /^Save/ }).click();
+  // Save navigates back to the story page
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
 
-  // Comment form should now appear
+  // Comment form should now appear on the story page
   await expect(page.getByPlaceholder("Add a comment…")).toBeVisible({ timeout: 8000 });
 
   // Disable comments again
   await page.getByRole("button", { name: "Modify Post" }).click();
+  await page.waitForURL(/\/stories(\?|$)/, { timeout: 8000 });
   await page.locator("input[type=checkbox]").last().uncheck();
   await page.getByRole("button", { name: /^Save/ }).click();
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
 
   // Comment form gone
   await expect(page.getByPlaceholder("Add a comment…")).not.toBeVisible({ timeout: 5000 });
@@ -138,22 +145,24 @@ test("TC-SCOM-08 Posted comment persists after reload + count badge appears", as
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
   await page.getByText("[SEED] Comments-enabled story").first().click();
+  await page.waitForURL(/\/stories\/.+/, { timeout: 8000 });
+
   const commentBox = page.getByPlaceholder("Add a comment\u2026");
   await expect(commentBox).toBeVisible({ timeout: 8000 });
   const commentText = "TC-SCOM-08 persist";
   await commentBox.fill(commentText);
   page.on("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Post", exact: true }).click();
-  // Wait for comment bubble to appear (not just the textarea value)
   await expect(page.locator(".rounded-lg.border.bg-background").filter({ hasText: commentText })).toBeVisible({ timeout: 8000 });
 
-  // Reload — comment must persist in thread
+  // Reload — still on the story page — comment must persist
   await page.reload();
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
-  await page.getByText("[SEED] Comments-enabled story").first().click();
-  // Comment appears in thread after reload
   await expect(page.locator(".rounded-lg.border.bg-background").filter({ hasText: commentText })).toBeVisible({ timeout: 12000 });
-  // Count badge on card (may be > 1 if earlier tests also posted)
+
+  // Navigate back to list to check count badge on card
+  await page.goto(`${BASE}/stories`);
+  await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
   await expect(page.getByText(/\d+ comments?/).first()).toBeVisible({ timeout: 8000 });
 });
 
@@ -164,10 +173,11 @@ test("TC-SCOM-REG-01 Event comments thread still renders after CommentThread ref
   await page.goto(`${BASE}/events`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  // Select the seed event
+  // Click the seed event card — navigates to /events/:id
   await page.getByText("[SEED] Ongoing Test Event").first().click();
+  await page.waitForURL(/\/events\/.+/, { timeout: 8000 });
 
-  // Comment thread heading and input visible
+  // Comment thread heading and input visible on the event detail page
   await expect(page.getByRole("heading", { name: /Comments/i })).toBeVisible({ timeout: 8000 });
   await expect(page.getByPlaceholder("Add a comment…")).toBeVisible();
 });
@@ -178,6 +188,7 @@ test("TC-SCOM-REG-02 Posting a comment on an event still works", async ({ page }
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
   await page.getByText("[SEED] Ongoing Test Event").first().click();
+  await page.waitForURL(/\/events\/.+/, { timeout: 8000 });
 
   const text = `TC-SCOM-REG-02 event comment ${Date.now()}`;
   const commentBox = page.getByPlaceholder("Add a comment…");
@@ -198,7 +209,8 @@ test("TC-SCOM-REG-03 Story visibility picker shows updated labels (Family not 't
   await page.goto(`${BASE}/stories`);
   await expect(page.locator("header").getByText(/❤️/)).toBeVisible({ timeout: 10000 });
 
-  await page.locator("main").getByRole("button", { name: "New Post" }).first().click();
+  // The + button has aria-label "New Post" — clicking opens the full-page create form
+  await page.getByRole("button", { name: "New Post" }).first().click();
   await expect(page.getByText("Who can see this?")).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Family").first()).toBeVisible();
   // Old label must not appear

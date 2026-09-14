@@ -70,6 +70,8 @@ function FamiliesTab() {
   const [acting, setActing]     = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied]     = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -79,15 +81,15 @@ function FamiliesTab() {
     finally { setLoading(false); }
   }
 
-  async function handleDelete(familyId: string, name: string) {
-    if (!confirm(`Permanently delete "${name}"? This removes all stories, events, tree data and cannot be undone.`)) return;
+  async function handleDelete(familyId: string) {
     setActing(familyId);
+    setDeleteError(null);
     try {
       await deleteFamily(familyId);
       setFamilies((prev) => prev.filter((f) => f.id !== familyId));
     } catch (err: any) {
-      alert(err.message);
-    } finally { setActing(null); }
+      setDeleteError(err.message);
+    } finally { setActing(null); setDeleteConfirmId(null); }
   }
 
   function copyLink(text: string, key: string) {
@@ -157,15 +159,28 @@ function FamiliesTab() {
 
               <div className="flex items-center gap-2 shrink-0">
                 {/* [ROLE: portal-admin] delete family */}
-                <Button size="sm" variant="outline" disabled={acting === fam.id}
-                  onClick={() => handleDelete(fam.id, fam.name)}
-                  className="text-rose-700 border-rose-200 hover:bg-rose-50">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {deleteConfirmId === fam.id ? (
+                  <div className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs">
+                    <span className="text-red-800">Delete "{fam.name}"?</span>
+                    <button onClick={() => handleDelete(fam.id)} disabled={acting === fam.id}
+                      className="text-destructive font-medium hover:underline">Delete</button>
+                    <button onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
+                      className="text-muted-foreground hover:underline">Cancel</button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" disabled={acting === fam.id}
+                    onClick={() => setDeleteConfirmId(fam.id)}
+                    className="text-rose-700 border-rose-200 hover:bg-rose-50">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => setExpanded(isExpanded ? null : fam.id)} aria-label="Toggle details">
                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
+              {deleteError && deleteConfirmId === null && (
+                <p className="text-xs text-destructive mt-1">{deleteError}</p>
+              )}
             </div>
 
             {/* Expanded detail */}
@@ -206,56 +221,58 @@ function UsersTab() {
   const [profiles, setProfiles]     = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [acting, setActing]         = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    type: "promote" | "demote" | "familyRole" | "delete";
+    userId: string; name: string; familyId?: string; familyName?: string; newRole?: string; label: string;
+  } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAllProfiles().then(setProfiles).finally(() => setLoading(false));
   }, []);
 
-  async function handlePromotePortal(userId: string, name: string) {
-    if (!confirm(`Make "${name}" a Portal Admin? They'll have full platform access.`)) return;
+  async function executeAction() {
+    if (!pendingAction) return;
+    const { type, userId, familyId, newRole } = pendingAction;
     setActing(userId);
+    setActionError(null);
     try {
-      await promoteToPortalAdmin(userId);
-      setProfiles((prev) => prev.map((p) => p.id === userId ? { ...p, is_portal_admin: true } : p));
-    } finally { setActing(null); }
-  }
-
-  async function handleDemotePortal(userId: string, name: string) {
-    if (!confirm(`Remove Portal Admin rights from "${name}"?`)) return;
-    setActing(userId);
-    try {
-      await demotePortalAdmin(userId);
-      setProfiles((prev) => prev.map((p) => p.id === userId ? { ...p, is_portal_admin: false } : p));
-    } finally { setActing(null); }
-  }
-
-  async function handleFamilyRole(userId: string, familyId: string, familyName: string, currentRole: string) {
-    const newRole = currentRole === 'admin' ? 'member' : 'admin';
-    const action  = newRole === 'admin' ? `Make family admin of "${familyName}"` : `Remove family admin from "${familyName}"`;
-    if (!confirm(action + "?")) return;
-    setActing(`${userId}-${familyId}`);
-    try {
-      await setFamilyRole(userId, familyId, newRole);
-      setProfiles((prev) => prev.map((p) => {
-        if (p.id !== userId) return p;
-        const memberships = (p.family_memberships ?? []).map((m: any) =>
-          m.family_id === familyId ? { ...m, role: newRole } : m
-        );
-        return { ...p, family_memberships: memberships };
-      }));
-    } finally { setActing(null); }
-  }
-
-  async function handleDeleteUser(userId: string, name: string) {
-    if (!confirm(`Delete "${name}"? This removes them from all families. Their stories/events remain but will be unattributed.`)) return;
-    if (!confirm(`Second confirmation: permanently remove "${name}" from the platform?`)) return;
-    setActing(userId);
-    try {
-      await deleteUser(userId);
-      setProfiles((prev) => prev.filter((p) => p.id !== userId));
+      if (type === "promote") {
+        await promoteToPortalAdmin(userId);
+        setProfiles((prev) => prev.map((p) => p.id === userId ? { ...p, is_portal_admin: true } : p));
+      } else if (type === "demote") {
+        await demotePortalAdmin(userId);
+        setProfiles((prev) => prev.map((p) => p.id === userId ? { ...p, is_portal_admin: false } : p));
+      } else if (type === "familyRole" && familyId && newRole) {
+        await setFamilyRole(userId, familyId, newRole as "admin" | "member");
+        setProfiles((prev) => prev.map((p) => {
+          if (p.id !== userId) return p;
+          return { ...p, family_memberships: (p.family_memberships ?? []).map((m: any) =>
+            m.family_id === familyId ? { ...m, role: newRole } : m) };
+        }));
+      } else if (type === "delete") {
+        await deleteUser(userId);
+        setProfiles((prev) => prev.filter((p) => p.id !== userId));
+      }
+      setPendingAction(null);
     } catch (err: any) {
-      alert(err.message);
+      setActionError(err.message);
     } finally { setActing(null); }
+  }
+
+  function handlePromotePortal(userId: string, name: string) {
+    setPendingAction({ type: "promote", userId, name, label: `Make "${name}" a Portal Admin? They'll have full platform access.` });
+  }
+  function handleDemotePortal(userId: string, name: string) {
+    setPendingAction({ type: "demote", userId, name, label: `Remove Portal Admin rights from "${name}"?` });
+  }
+  function handleFamilyRole(userId: string, familyId: string, familyName: string, currentRole: string) {
+    const newRole = currentRole === 'admin' ? 'member' : 'admin';
+    const label = newRole === 'admin' ? `Make family admin of "${familyName}"?` : `Remove family admin of "${familyName}"?`;
+    setPendingAction({ type: "familyRole", userId, name: "", familyId, familyName, newRole, label });
+  }
+  function handleDeleteUser(userId: string, name: string) {
+    setPendingAction({ type: "delete", userId, name, label: `Permanently remove "${name}" from the platform? Their stories/events remain but will be unattributed.` });
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading users…</p>;
@@ -264,6 +281,24 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
+      {/* Inline confirm dialog */}
+      {pendingAction && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="text-amber-900 font-medium mb-2">{pendingAction.label}</p>
+          {actionError && <p className="text-xs text-destructive mb-2">{actionError}</p>}
+          <div className="flex gap-2">
+            <button onClick={executeAction} disabled={!!acting}
+              className="inline-flex items-center gap-1 rounded px-3 py-1 text-xs font-medium bg-destructive text-white hover:bg-destructive/90 disabled:opacity-50">
+              Confirm
+            </button>
+            <button onClick={() => { setPendingAction(null); setActionError(null); }}
+              className="inline-flex items-center gap-1 rounded border px-3 py-1 text-xs font-medium hover:bg-muted">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         {[

@@ -63,6 +63,7 @@ function CommentBubble({
   replyCount: number;
 }) {
   const [showEmojis, setShowEmojis] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const isOwn = session?.user?.id === comment.author_id;
 
   const reactionGroups = EMOJIS.map((emoji) => {
@@ -146,17 +147,22 @@ function CommentBubble({
           </button>
         )}
 
-        {isOwn && (
+        {isOwn && !confirmDelete && (
           <button
-            onClick={async () => {
-              if (!confirm("Delete this comment?")) return;
-              await deleteComment(comment.id);
-              onDelete();
-            }}
+            onClick={() => setConfirmDelete(true)}
             className="ml-auto text-[10px] text-muted-foreground hover:text-destructive"
           >
             Delete
           </button>
+        )}
+        {isOwn && confirmDelete && (
+          <span className="ml-auto flex items-center gap-1.5 text-[10px]">
+            <span className="text-muted-foreground">Delete?</span>
+            <button onClick={async () => { await deleteComment(comment.id); onDelete(); }}
+              className="text-destructive font-medium hover:underline">Yes</button>
+            <button onClick={() => setConfirmDelete(false)}
+              className="text-muted-foreground hover:underline">Cancel</button>
+          </span>
         )}
       </div>
     </div>
